@@ -61,6 +61,7 @@ read_mtx
 copy
 
 ### Writing / Output
+fill_view
 write_csv  
 write_bin  
 create_view  
