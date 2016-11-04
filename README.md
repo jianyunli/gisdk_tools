@@ -3,12 +3,12 @@
 These are generic "brick and blocks" for travel demand models written in GISDK for models built in TransCAD.
 This repository is intended to be imported as a submodule to other model repos.
 
-  * general tools
+  * General tools
     * gplyr
       * data frame, dplyr, and tidyr implemented in GISDK
     * ModelUtilities
       * basic tools helpful in all TC models
-  * Generalized model components
+  * General model components
     * ProjectManagement
       * Standardizes the approach of a master roadway networking creating scenario networks
     * AreaType
