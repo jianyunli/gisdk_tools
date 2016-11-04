@@ -1,0 +1,65 @@
+# R script to calculate network speeds and capacities
+
+# Load packages
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ipfr)
+library(tcadr)
+
+# The script is called from the command line
+# by the model. Collect arguments passed.
+args <- commandArgs(trailingOnly = TRUE)
+seBIN <- args[1]
+seedTbl <- args[2]
+outputDir <- args[3]
+
+# for testing
+# seBIN <- "C:\\projects\\Hickory\\HickoryRepo\\scenarios\\Base_2015\\outputs\\sedata\\ScenarioSE.bin"
+# seedTbl <- "C:\\projects\\Hickory\\HickoryRepo\\scenarios\\Base_2015\\inputs\\generation\\disagg_hh_joint.csv"
+# outputDir <- "C:\\projects\\Hickory\\HickoryRepo\\scenarios\\Base_2015\\outputs\\generation"
+
+# Read in the seed table and use it to determine marginals
+seedTbl <- read_csv(seedTbl)
+margNames <- colnames(select(seedTbl, -weight))
+marg_cats <- c()
+for (name in margNames){
+  marg_cats <- append(marg_cats, paste0(name, unique(seedTbl[[name]])))
+}
+
+# read the se bin file into a data frame
+seTbl <- read_tcad(seBIN)
+# Change any NAs to zero
+seTbl[is.na(seTbl)] <- 0
+
+# Create a marginal table from se table
+margTbl <- seTbl %>%
+  select(ID, one_of(marg_cats))
+
+# Break the marginal table up into a list of data frames for ipf()
+targets <- list()
+for (name in margNames) {
+  temp <- margTbl %>%
+    select(ID, starts_with(name))
+  colnames(temp) <- gsub(name, "", colnames(temp))
+  targets[[name]] <- temp
+}
+
+# Perform IPF using the ipfr package
+final <- ipf(seedTbl, targets, verbose = TRUE)
+
+# Sleep for 10 seconds to allow user to see the output if desired
+cat("\n Waiting 10 seconds")
+Sys.sleep(10)
+
+# Create wrk x veh table for work trips
+work_tbl <- final %>%
+  group_by(ID, wrk, veh) %>%
+  summarize(HH = sum(weight))
+write_csv(work_tbl, paste0(outputDir, "/wrk_by_veh.csv"))
+
+# Create siz x veh table for non-work trips
+nonwork_tbl <- final %>%
+  group_by(ID, siz, veh) %>%
+  summarize(HH = sum(weight))
+write_csv(nonwork_tbl, paste0(outputDir, "/siz_by_veh.csv"))
