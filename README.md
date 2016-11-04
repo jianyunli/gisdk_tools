@@ -1,6 +1,7 @@
 # gisdk_tools
 
 These are generic "brick and blocks" for travel demand models written in GISDK for models built in TransCAD.
+This repository is intended to be imported as a submodule to other model repos.
 
   * general tools
     * gplyr
@@ -27,7 +28,13 @@ These are generic "brick and blocks" for travel demand models written in GISDK f
     * Mode Split
       * Mode Choice
         Uses the NestedLogitEngine in TC (similar approach to DC)
-    
+
+# Installation into your model
+
+1. Add to model repository as a submodule
+2. Add the rsc files to the compile.lst file as needed
+
+After that, your project code can call the macros/methods.
 
 # gplyr
 Creating a structure in GISDK similar to data frames in R, with methods
