@@ -1,3 +1,34 @@
+# gisdk_tools
+
+These are generic "brick and blocks" for travel demand models written in GISDK for models built in TransCAD.
+
+  * general tools
+    * gplyr
+      * data frame, dplyr, and tidyr implemented in GISDK
+    * ModelUtilities
+      * basic tools helpful in all TC models
+  * Generalized model components
+    * ProjectManagement
+      * Standardizes the approach of a master roadway networking creating scenario networks
+    * AreaType
+      * Standardizes the approach to calculating area type
+    * HCMCapacity
+      * Calculates hourly link capacities using HCM2010 formulas
+      * Uses the hcmr R package
+    * Generation
+      * Household Disaggregation
+        * Uses the ipfr R package
+      * Simple rate model (e.g. for attractions)
+      * Cross-classification model
+    * Distribution
+      * Gravity model
+      * Destination Choice
+        * Uses the NestedLogitEngine in TC
+    * Mode Split
+      * Mode Choice
+        Uses the NestedLogitEngine in TC (similar approach to DC)
+    
+
 # gplyr
 Creating a structure in GISDK similar to data frames in R, with methods
 that mimic dplyr and tidyr packages.
