@@ -3,7 +3,7 @@ Uses the R package 'hmcr' to determine hourly capacities.
 
 Input:
 RScriptExe  String  Path to "Rscript.exe"
-RScript     String  Path to "HourlyCapacity.R"
+RScript     String  Path to "HCMCapacity.R"
 hwyDBD      String  Full path of the highway geodatabase.  Must have fields:
   HCMType       ABLanes
   AreaType      BALanes
