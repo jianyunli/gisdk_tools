@@ -8,7 +8,6 @@ MacroOpts
   hwyDBD        Highway network to update
   projList      CSV file of project IDs
                 (A single column titled "ProjID" with a proj ID on each row)
-  attrList      Array of attribute field names to be updated
   masterDBD     Master highway network to be cleaned (if necessary)
 
 Output:
@@ -53,11 +52,10 @@ should have their base year attributes set to null.
 Projects listed first in the CSV have priority if two or more projects overlap.
 */
 
-Macro "Select Projects" (MacroOpts)
+Macro "Road Project Management" (MacroOpts)
 
   hwyDBD = MacroOpts.hwyDBD
   projList = MacroOpts.projList
-  attrList = MacroOpts.attrList
   masterDBD = MacroOpts.masterDBD
 
   // Get vector of project IDs from the project list file
@@ -70,20 +68,23 @@ Macro "Select Projects" (MacroOpts)
   lLyr = AddLayerToWorkspace(lLyr, hwyDBD, lLyr)
   nLyr = AddLayerToWorkspace(nLyr, hwyDBD, nLyr)
 
-  // Determine the project groupings on the highway layer
-  projGroups = RunMacro("Determine Project Groups", lLyr)
-
   // Check validity of project definitions
-  fix_master = RunMacro("Check Project Group Validity", lLyr, projGroups)
+  fix_master = RunMacro("Check Project Group Validity", lLyr)
   if fix_master then do
-    RunMacro("Clean Project Groups", masterDBD, projGroups, attrList)
+    RunMacro("Clean Project Groups", masterDBD)
+    RunMacro("Destroy Progress Bars")
     Throw("Project groups fixed. Start the export process again.")
   end
-  Throw()
 
   // Add "UpdatedWithP" field
   a_fields = {{"UpdatedWithP", "Integer", 10, }}
   RunMacro("Add Fields", lLyr, a_fields)
+
+  // Determine the project groupings and attributes on the link layer.
+  // Remove ID from the list of attributes to update.
+  projGroups = RunMacro("Get Project Groups", lLyr)
+  attrList = RunMacro("Get Project Attributes", lLyr)
+  attrList = ExcludeArrayElements(attrList, 1, 1)
 
   // Loop over each project ID
   for p = 1 to v_projIDs.length do
@@ -164,7 +165,7 @@ Returns
   Array of project prefixes
 */
 
-Macro "Determine Project Groups" (lLyr)
+Macro "Get Project Groups" (lLyr)
 
   a_fields = GetFields(lLyr, "All")
   a_fields = a_fields[1]
@@ -182,10 +183,38 @@ Macro "Determine Project Groups" (lLyr)
 EndMacro
 
 /*
+Gets an array of attributes associated with projects
+*/
+
+Macro "Get Project Attributes" (lLyr)
+
+  projGroups = RunMacro("Get Project Groups", lLyr)
+  pgroup = projGroups[1]
+
+  a_fields = GetFields(lLyr, "All")
+  a_fields = a_fields[1]
+  attr = null
+  for f = 1 to a_fields.length do
+    field = a_fields[f]
+
+    if Substring(field, 1, 2) = pgroup then do
+      len = StringLength(field)
+      field = Substring(field, 3, len - 2)
+      attr = attr + {field}
+    end
+  end
+
+  return(attr)
+EndMacro
+
+/*
 Given a single project ID, returns which group the project is in
 */
 
-Macro "Determine Project's Group" (p_id, lLyr, projGroups)
+Macro "Get Project's Group" (p_id, lLyr)
+
+  // Determine the project groupings on the link layer
+  projGroups = RunMacro("Get Project Groups", lLyr)
 
   SetLayer(lLyr)
   qry_id = if (TypeOf(p_id) = "string")
@@ -207,7 +236,10 @@ EndMacro
 Makes sure that project IDs only show up in one group
 */
 
-Macro "Check Project Group Validity" (lLyr, projGroups)
+Macro "Check Project Group Validity" (lLyr)
+
+  // Determine the project groupings on the link layer
+  projGroups = RunMacro("Get Project Groups", lLyr)
 
   // return if only 1 project group
   if projGroups.length = 1 then return()
@@ -272,12 +304,17 @@ same group in the master network.  It also makes sure that the group is as low
 a number as possible.
 */
 
-Macro "Clean Project Groups" (masterDBD, projGroups, attrList)
+Macro "Clean Project Groups" (masterDBD)
 
+  // Add link layer to workspace
   {nLyr, lLyr} = GetDBLayers(masterDBD)
   lLyr = AddLayerToWorkspace(lLyr, masterDBD, lLyr)
 
-  v_ids = RunMacro("Get All Project IDs", lLyr, projGroups)
+  // Determine the project groupings and attributes on the link layer
+  projGroups = RunMacro("Get Project Groups", lLyr)
+  attrList = RunMacro("Get Project Attributes", lLyr)
+
+  v_ids = RunMacro("Get All Project IDs", lLyr)
   for i = 1 to v_ids.length do
     id = v_ids[i]
 
@@ -287,24 +324,18 @@ Macro "Clean Project Groups" (masterDBD, projGroups, attrList)
 
     // Check how many project groups the project is in
     // while creating a selection set of all project links
-    groups = 0
-    SetLayer(lLyr)
-    for p = 1 to projGroups.length do
-      qry = "Select * where " + projGroups[p] + "ID = " + qry_id
-      n = SelectByQuery("test", "several", qry)
-      if n > 0 then groups = groups + 1
-      mode = if (p = 1) then "several" else "more"
-      n = SelectByQuery("proj_links", mode, qry)
-    end
+
+    {set_name, num_records, num_pgroups} =
+      RunMacro("Create Project Set", id, lLyr)
 
     // if multiple groups were found, clean up
-    if groups > 1 then do
+    if num_pgroups > 1 then do
       // find first project group where all project attributes can exist
       target_group = null
       for p = 1 to projGroups.length do
         pgroup = projGroups[p]
 
-        v_test = GetDataVector(lLyr + "|proj_links", pgroup + "ID", )
+        v_test = GetDataVector(lLyr + "|" + set_name, pgroup + "ID", )
         opts = null
         opts.[Omit Missing] = "True"
         opts.Unique = "True"
@@ -314,15 +345,12 @@ Macro "Clean Project Groups" (masterDBD, projGroups, attrList)
 
       // if none found, create a new group
       if target_group = null then do
-        RunMacro("Create Project Group", p, lLyr, attrList)
+        RunMacro("Create Project Group", p, lLyr)
         target_group = "p" + String(p)
-        projGroups = projGroups + {target_group}
       end
 
       // Move project to target group
-      RunMacro(
-        "Move Project To Group", id, target_group, lLyr, projGroups, attrList
-      )
+      RunMacro("Move Project To Group", id, target_group, lLyr)
     end
   end
 
@@ -336,7 +364,7 @@ Macro "Clean Project Groups" (masterDBD, projGroups, attrList)
       id = v_ids[i]
 
       // Select the project links
-      pgroup = RunMacro("Determine Project's Group", id, lLyr, projGroups)
+      pgroup = RunMacro("Get Project's Group", id, lLyr)
       qry_id = if (TypeOf(id) = "string")
         then "'" + id + "'"
         else String(id)
@@ -355,10 +383,7 @@ Macro "Clean Project Groups" (masterDBD, projGroups, attrList)
           qry = "Select * where " + target_group + "ID = null"
           m = SelectByQuery("check", "several", qry, opts)
           if m = n then do
-            RunMacro(
-              "Move Project To Group",
-              id, target_group, lLyr, projGroups, attrList
-            )
+            RunMacro("Move Project To Group", id, target_group, lLyr)
             changed = "True"
             p = pos + 1
           end
@@ -368,6 +393,59 @@ Macro "Clean Project Groups" (masterDBD, projGroups, attrList)
   end
 
   // Delete any empty project groups
+  RunMacro("Delete Empty Project Groups", lLyr)
+
+  RunMacro("Close All")
+EndMacro
+
+/*
+Creates a selection of all links that belong to a project
+regardless of project group.
+
+Returns
+  set_name
+  Name of selection set (always "proj_links")
+
+  num_records
+  Number of records in selection set
+
+  num_pgroups
+  Number of groups the project is in
+*/
+
+Macro "Create Project Set" (p_id, lLyr)
+
+  // Determine the project groupings on the link layer
+  projGroups = RunMacro("Get Project Groups", lLyr)
+
+  num_pgroups = 0
+  set_name = "proj_links"
+  qry_id = if (TypeOf(p_id) = "string")
+    then "'" + p_id + "'"
+    else String(p_id)
+  SetLayer(lLyr)
+  for p = 1 to projGroups.length do
+    qry = "Select * where " + projGroups[p] + "ID = " + qry_id
+    n = SelectByQuery("test", "several", qry)
+    if n > 0 then num_pgroups = num_pgroups + 1
+    mode = if (p = 1) then "several" else "more"
+    num_records = SelectByQuery(set_name, mode, qry)
+  end
+
+  return({set_name, num_records, num_pgroups})
+EndMacro
+
+/*
+Removes any extra project groups from the network
+*/
+
+Macro "Delete Empty Project Groups" (lLyr)
+
+  // Determine the project groupings and attributes on the link layer
+  projGroups = RunMacro("Get Project Groups", lLyr)
+  attrList = RunMacro("Get Project Attributes", lLyr)
+
+  SetLayer(lLyr)
   for p = 1 to projGroups.length do
     pgroup = projGroups[p]
 
@@ -383,8 +461,6 @@ Macro "Clean Project Groups" (masterDBD, projGroups, attrList)
       end
     end
   end
-
-  RunMacro("Close All")
 EndMacro
 
 /*
@@ -395,7 +471,10 @@ Returns
   Vector of project IDs
 */
 
-Macro "Get All Project IDs" (lLyr, projGroups)
+Macro "Get All Project IDs" (lLyr)
+
+  // Determine the project groupings and attributes on the link layer
+  projGroups = RunMacro("Get Project Groups", lLyr)
 
   for p = 1 to projGroups.length do
     pgroup = projGroups[p]
@@ -415,12 +494,14 @@ EndMacro
 Creates a new group of project fields
 */
 
-Macro "Create Project Group" (number, lLyr, attrList)
+Macro "Create Project Group" (number, lLyr)
 
-  a_attrs = {"ID"} + attrList
+  // Determine the project groupings and attributes on the link layer
+  attrList = RunMacro("Get Project Attributes", lLyr)
+
   pgroup = "p" + String(number)
-  for f = 1 to a_attrs.length do
-    field = a_attrs[f]
+  for f = 1 to attrList.length do
+    field = attrList[f]
 
     // Create a new field that matches the info from the first project group
     {type, width, dec, index} = GetFieldInfo(lLyr + ".p1" + field)
@@ -438,10 +519,13 @@ creates a selection set of the current project's links called "proj_links",
 which is used by this macro.
 */
 
-Macro "Move Project To Group" (p_id, target_group, lLyr, projGroups, attrList)
+Macro "Move Project To Group" (p_id, target_group, lLyr)
+
+  // Determine the project groupings and attributes on the link layer
+  projGroups = RunMacro("Get Project Groups", lLyr)
+  attrList = RunMacro("Get Project Attributes", lLyr)
 
   SetLayer(lLyr)
-  a_attrs = {"ID"} + attrList
   qry_id = if (TypeOf(p_id) = "string")
     then "'" + p_id + "'"
     else String(p_id)
@@ -462,9 +546,9 @@ Macro "Move Project To Group" (p_id, target_group, lLyr, projGroups, attrList)
     n = SelectByQuery("mptg_sel", "several", qry)
     if n > 0 and pgroup <> target_group then do
       // Move project attributes
-      for a = 1 to a_attrs.length do
-        from_field = pgroup + a_attrs[a]
-        to_field = target_group + a_attrs[a]
+      for a = 1 to attrList.length do
+        from_field = pgroup + attrList[a]
+        to_field = target_group + attrList[a]
 
         v_vec = GetDataVector(lLyr + "|mptg_sel", from_field, )
         v_null = Vector(v_vec.length, v_vec.type, )
