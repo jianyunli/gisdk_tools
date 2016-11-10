@@ -1071,6 +1071,59 @@ Class "df" (tbl)
   EndItem
 
   /*
+  Reverse of spread().  Places the names of multiple columns
+  into a single "key" column and places the values of those
+  multiple columns into a single "value" column.
+
+  gather_cols
+    Array or vector of strings
+    Lists the column to gather
+
+  key
+    String
+    Name of column that will hold previous column names
+
+  value
+    String
+    Name of column that will hold previous column values
+  */
+
+  Macro "gather" (gather_cols, key, value) do
+
+    // Argument check
+    if key = null then key = "key"
+    if value = null then value = "value"
+    if gather_cols = null then Throw("gather: 'key' missing")
+    if TypeOf(gather_cols) <> "vector" and TypeOf(gather_cols) <> "array"
+      then Throw("gather: 'gather_cols' must be an array or vector")
+
+    // Create a seed df that will be used to build new table
+    seed = self.copy()
+    seed.remove(gather_cols)
+
+    // build new table by looping over each of gather_cols
+    for c = 1 to gather_cols.length do
+      col = gather_cols[c]
+
+      // use the seed df to create a simple table
+      temp = seed.copy()
+      opts = null
+      opts.Constant = col
+      v_key = Vector(self.nrow(), "string", opts)
+      temp.mutate(key, v_key)
+      temp.mutate(value, self.tbl.(col))
+
+      // If first gather column, create final table from temp.
+      // Otherwise, append temp to final table
+      if c = 1 then final = temp.copy()
+      else final.bind_rows(temp)
+    end
+
+    // Set self to final
+    self.tbl = final.tbl
+  EndItem
+
+  /*
   Combines the rows of two tables. They must have the
   same columns.
 
@@ -1116,7 +1169,7 @@ Runs through all the methods and writes out results
 Macro "test"
 
   // Input files used in some tests
-  dir = "C:\\projects/gplyr/unit_test_data"
+  dir = "C:\\projects/gisdk_tools/gplyr/unit_test_data"
   csv_file = dir + "/example.csv"
   bin_file = dir + "/example.bin"
   mtx_file = dir + "/example.mtx"
@@ -1285,6 +1338,17 @@ Macro "test"
   answer = {0, 0, 115, 0, 0, 25}
   for a = 1 to answer.length do
     if df.tbl.Blue[a] <> answer[a] then Throw("test: spread() failed")
+  end
+
+  // test gather
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  df.spread("Color", "Count", 0)
+  df.gather({"Red", "Yellow", "Blue"}, "Color", "Count")
+  if df.tbl[3][1] <> "Color" then Throw("test: gather() failed")
+  answer = {0, 100, 50, 35, 0, 75, 0, 115, 25}
+  for a = 1 to answer.length do
+    if df.tbl.Count[a] <> answer[a] then Throw("test: gather() failed")
   end
 
   // test bind_rows
