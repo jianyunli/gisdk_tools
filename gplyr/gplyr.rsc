@@ -37,19 +37,38 @@ Class "df" (tbl)
   Checks a column name to see if it is reserved.  If so, the name
   is bracketed.
 
-  Returns
+  Inputs
     field_name
-    The field name with brackets if appropriate.
+    String or array/vector of strings
+    field name(s) to check
+
+  Returns
+    The field name with brackets if appropriate. If the input
+    is an array/vector, then the output will be a vector.
   */
 
   Macro "check_name" (field_name) do
 
-    a_reserved = {"length"}
-    field_name = if self.in(field_name, a_reserved)
-      then "[" + field_name + "]"
-      else field_name
+    // Argument check
+    if TypeOf(field_name) = "string" then field_name = {field_name}
+    if TypeOf(field_name) = "vector" then field_name = V2A(field_name)
+    if TypeOf(field_name) <> "array"
+      then Throw("check_name: 'field_name' must be string, array, or vector")
 
-    return(field_name)
+    a_reserved = {"length"}
+    for f = 1 to field_name.length do
+      name = field_name[f]
+
+      name = if self.in(name, a_reserved)
+        then "[" + name + "]"
+        else name
+
+      a_result = a_result + {name}
+    end
+
+    if a_result.length = 1
+      then return(a_result[1])
+      else return(A2V(a_result))
   EndItem
 
   /*
