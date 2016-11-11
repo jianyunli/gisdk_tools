@@ -341,6 +341,8 @@ Class "df" (tbl)
 
     // Check for required arguments and
     // that data frame is currently empty
+    if view = null then view = GetLayer()
+    if view = null then view = GetView()
     if view = null
       then Throw("read_view: Required argument 'view' missing.")
     if !self.is_empty() then Throw("read_view: data frame must be empty")
