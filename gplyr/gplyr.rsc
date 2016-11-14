@@ -1180,6 +1180,118 @@ Class "df" (tbl)
     self.check()
   EndItem
 
+  /*
+  Creates a field of categories based on a continuous numeric field.
+
+  MacroOpts
+    Options array
+
+    in_field
+      String
+      Name of continuous field to be "binned"
+
+    bins
+      Number or array/vector of numbers
+
+      If a number:
+      Then it represents the number of bins to create.  The range of
+      the in_field will be divided up evenly.
+
+      If an array/vector:
+      Each number listed represents the start of the bin. The end of the
+      last bin is assumed to be the max value in the field.
+      e.g. {0, 1} is:
+      0 <= x < 1
+      1 <= x < [max number]
+
+    labels
+      Optional array or vector of numbers or strings
+      Names of the bins.
+      If 'bins' is a list, length must be 1 less than the length of 'bins'.
+      If 'bins' is a number, then length must be the same as 'bins'.
+      If not provided, the bins will be labeled 1 - n
+  */
+
+  Macro "bin_field" (MacroOpts) do
+
+    in_field = MacroOpts.in_field
+    bins = MacroOpts.bins
+    labels = MacroOpts.labels
+
+    // Argument check
+    if in_field = null then Throw("bin_field: 'in_field' not provided")
+    if !self.in(in_field, self.colnames())
+      then Throw("bin_field: 'in_field' not a column name in table")
+    if bins = null then Throw("bin_field: 'bins' not provided")
+    if TypeOf(bins) = "vector" then bins = V2A(bins)
+    if labels <> null then do
+      if !self.in(TypeOf(labels), {"array", "vector"})
+        then Throw("bin_field: 'labels' must be an array or vector")
+    end
+    // Determine whether 'bins' is a number or array and number of bins
+    bin_type = TypeOf(bins)
+    if (bin_type = "int") then bin_num = bins
+    else if (bin_type = "array") then bin_num = bins.length
+    else Throw("bin_field: 'bins' must be number, array, or vector")
+    // check length of 'labels' if provided
+    if labels <> null then do
+      if labels.length <> bin_num
+        then Throw(
+          "bin_field: 'labels' length must equal the number of bins"
+        )
+    end
+
+    // Determine min/max values of 'in_field'
+    max = VectorStatistic(self.tbl.(in_field), "max", )
+    min = VectorStatistic(self.tbl.(in_field), "min", )
+
+    // If 'bins' is a list, remove values outside in_field
+    if bin_type = "list" then do
+
+      for b = bin_num to 1 step -1 do
+        bin = bins[b]
+
+        if !(bin >= min and bin <= max) then do
+          ExcludeArrayElements(bins, b, 1)
+          if labels <> null then ExcludeArrayElements(labels, b, 1)
+        end
+      end
+    end
+
+    // If 'bins' is a number, then convert to an array of values
+    if bin_type = "int" then do
+      size = (max - min) / bin_num
+
+      bins = {min}
+      for b = 1 to bin_num do
+        bins = bins + {min + size * b}
+      end
+    end
+
+    // Create 'labels' if it is not provided
+    if labels = null then do
+      for b = 1 to bin_num do
+        labels = labels + {b}
+      end
+    end
+
+    // Convert 'bins' into from and to arrays and perform the binning process
+    a_from = bins
+    a_to = ExcludeArrayElements(bins, 1, 1) + {max}
+    for i = 1 to labels.length do
+      label = labels[i]
+      from = a_from[i]
+      to = if (i = labels.length)
+        then a_to[i] + .01
+        else a_to[i]
+
+      v_label = if (self.tbl.(in_field) >= from and self.tbl.(in_field) < to)
+        then label else v_label
+    end
+
+    self.mutate("bin", v_label)
+  EndItem
+
 endClass
 
 
@@ -1382,6 +1494,36 @@ Macro "test"
   answer = {50, 75, 25, 100, 115, 35, 50, 75, 25, 100, 115, 35}
   for a = 1 to answer.length do
     if df.tbl.Count[a] <> answer[a] then Throw("test: bind_rows() failed")
+  end
+
+  // test bin_field (when 'bins' is just a number and no labels)
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  opts = null
+  opts.in_field = "Count"
+  opts.bins = 3
+  df.bin_field(opts)
+  answer = {1, 2, 1, 3, 3, 1}
+  for a = 1 to answer.length do
+    if df.tbl.bin[a] <> answer[a] then Throw("test: bin_field() failed")
+  end
+  // test2 (add lables)
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  opts.labels = {"A", "B", "C"}
+  df.bin_field(opts)
+  answer = {"A", "B", "A", "C", "C", "A"}
+  for a = 1 to answer.length do
+    if df.tbl.bin[a] <> answer[a] then Throw("test: bin_field() failed")
+  end
+  // test3 (when 'bins' is a list and values outside range)
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  opts.bins = {0, 30, 150}
+  df.bin_field(opts)
+  answer = {"B", "B", "A", "B", "B", "B"}
+  for a = 1 to answer.length do
+    if df.tbl.bin[a] <> answer[a] then Throw("test: bin_field() failed")
   end
 
   ShowMessage("Passed Tests")
