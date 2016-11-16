@@ -427,7 +427,7 @@ Class "df" (tbl)
   Simple wrappers to read_view that read bin and csv directly
   */
 
-  Macro "read_bin" (file) do
+  Macro "read_bin" (file, fields) do
     // Check extension
     ext = ParseString(file, ".")
     ext = ext[2]
@@ -435,10 +435,11 @@ Class "df" (tbl)
 
     opts = null
     opts.view = OpenTable("view", "FFB", {file})
+    opts.fields = fields
     self.read_view(opts)
     CloseView(opts.view)
   EndItem
-  Macro "read_csv" (file) do
+  Macro "read_csv" (file, fields) do
     // Check extension
     a_parts = ParseString(file, ".")
     ext = a_parts[2]
@@ -446,6 +447,7 @@ Class "df" (tbl)
 
     opts = null
     opts.view = OpenTable("view", "CSV", {file})
+    opts.fields = fields
     self.read_view(opts)
     CloseView(opts.view)
 
