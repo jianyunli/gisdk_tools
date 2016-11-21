@@ -37,19 +37,38 @@ Class "df" (tbl)
   Checks a column name to see if it is reserved.  If so, the name
   is bracketed.
 
-  Returns
+  Inputs
     field_name
-    The field name with brackets if appropriate.
+    String or array/vector of strings
+    field name(s) to check
+
+  Returns
+    The field name with brackets if appropriate. If the input
+    is an array/vector, then the output will be a vector.
   */
 
   Macro "check_name" (field_name) do
 
-    a_reserved = {"length"}
-    field_name = if self.in(field_name, a_reserved)
-      then "[" + field_name + "]"
-      else field_name
+    // Argument check
+    if TypeOf(field_name) = "string" then field_name = {field_name}
+    if TypeOf(field_name) = "vector" then field_name = V2A(field_name)
+    if TypeOf(field_name) <> "array"
+      then Throw("check_name: 'field_name' must be string, array, or vector")
 
-    return(field_name)
+    a_reserved = {"length"}
+    for f = 1 to field_name.length do
+      name = field_name[f]
+
+      name = if self.in(name, a_reserved)
+        then "[" + name + "]"
+        else name
+
+      a_result = a_result + {name}
+    end
+
+    if a_result.length = 1
+      then return(a_result[1])
+      else return(A2V(a_result))
   EndItem
 
   /*
@@ -322,6 +341,8 @@ Class "df" (tbl)
 
     // Check for required arguments and
     // that data frame is currently empty
+    if view = null then view = GetLayer()
+    if view = null then view = GetView()
     if view = null
       then Throw("read_view: Required argument 'view' missing.")
     if !self.is_empty() then Throw("read_view: data frame must be empty")
@@ -406,7 +427,7 @@ Class "df" (tbl)
   Simple wrappers to read_view that read bin and csv directly
   */
 
-  Macro "read_bin" (file) do
+  Macro "read_bin" (file, fields) do
     // Check extension
     ext = ParseString(file, ".")
     ext = ext[2]
@@ -414,10 +435,11 @@ Class "df" (tbl)
 
     opts = null
     opts.view = OpenTable("view", "FFB", {file})
+    opts.fields = fields
     self.read_view(opts)
     CloseView(opts.view)
   EndItem
-  Macro "read_csv" (file) do
+  Macro "read_csv" (file, fields) do
     // Check extension
     a_parts = ParseString(file, ".")
     ext = a_parts[2]
@@ -425,6 +447,7 @@ Class "df" (tbl)
 
     opts = null
     opts.view = OpenTable("view", "CSV", {file})
+    opts.fields = fields
     self.read_view(opts)
     CloseView(opts.view)
 
@@ -1071,6 +1094,59 @@ Class "df" (tbl)
   EndItem
 
   /*
+  Reverse of spread().  Places the names of multiple columns
+  into a single "key" column and places the values of those
+  multiple columns into a single "value" column.
+
+  gather_cols
+    Array or vector of strings
+    Lists the column to gather
+
+  key
+    String
+    Name of column that will hold previous column names
+
+  value
+    String
+    Name of column that will hold previous column values
+  */
+
+  Macro "gather" (gather_cols, key, value) do
+
+    // Argument check
+    if key = null then key = "key"
+    if value = null then value = "value"
+    if gather_cols = null then Throw("gather: 'key' missing")
+    if TypeOf(gather_cols) <> "vector" and TypeOf(gather_cols) <> "array"
+      then Throw("gather: 'gather_cols' must be an array or vector")
+
+    // Create a seed df that will be used to build new table
+    seed = self.copy()
+    seed.remove(gather_cols)
+
+    // build new table by looping over each of gather_cols
+    for c = 1 to gather_cols.length do
+      col = gather_cols[c]
+
+      // use the seed df to create a simple table
+      temp = seed.copy()
+      opts = null
+      opts.Constant = col
+      v_key = Vector(self.nrow(), "string", opts)
+      temp.mutate(key, v_key)
+      temp.mutate(value, self.tbl.(col))
+
+      // If first gather column, create final table from temp.
+      // Otherwise, append temp to final table
+      if c = 1 then final = temp.copy()
+      else final.bind_rows(temp)
+    end
+
+    // Set self to final
+    self.tbl = final.tbl
+  EndItem
+
+  /*
   Combines the rows of two tables. They must have the
   same columns.
 
@@ -1106,6 +1182,118 @@ Class "df" (tbl)
     self.check()
   EndItem
 
+  /*
+  Creates a field of categories based on a continuous numeric field.
+
+  MacroOpts
+    Options array
+
+    in_field
+      String
+      Name of continuous field to be "binned"
+
+    bins
+      Number or array/vector of numbers
+
+      If a number:
+      Then it represents the number of bins to create.  The range of
+      the in_field will be divided up evenly.
+
+      If an array/vector:
+      Each number listed represents the start of the bin. The end of the
+      last bin is assumed to be the max value in the field.
+      e.g. {0, 1} is:
+      0 <= x < 1
+      1 <= x < [max number]
+
+    labels
+      Optional array or vector of numbers or strings
+      Names of the bins.
+      If 'bins' is a list, length must be 1 less than the length of 'bins'.
+      If 'bins' is a number, then length must be the same as 'bins'.
+      If not provided, the bins will be labeled 1 - n
+  */
+
+  Macro "bin_field" (MacroOpts) do
+
+    in_field = MacroOpts.in_field
+    bins = MacroOpts.bins
+    labels = MacroOpts.labels
+
+    // Argument check
+    if in_field = null then Throw("bin_field: 'in_field' not provided")
+    if !self.in(in_field, self.colnames())
+      then Throw("bin_field: 'in_field' not a column name in table")
+    if bins = null then Throw("bin_field: 'bins' not provided")
+    if TypeOf(bins) = "vector" then bins = V2A(bins)
+    if labels <> null then do
+      if !self.in(TypeOf(labels), {"array", "vector"})
+        then Throw("bin_field: 'labels' must be an array or vector")
+    end
+    // Determine whether 'bins' is a number or array and number of bins
+    bin_type = TypeOf(bins)
+    if (bin_type = "int") then bin_num = bins
+    else if (bin_type = "array") then bin_num = bins.length
+    else Throw("bin_field: 'bins' must be number, array, or vector")
+    // check length of 'labels' if provided
+    if labels <> null then do
+      if labels.length <> bin_num
+        then Throw(
+          "bin_field: 'labels' length must equal the number of bins"
+        )
+    end
+
+    // Determine min/max values of 'in_field'
+    max = VectorStatistic(self.tbl.(in_field), "max", )
+    min = VectorStatistic(self.tbl.(in_field), "min", )
+
+    // If 'bins' is a list, remove values outside in_field
+    if bin_type = "list" then do
+
+      for b = bin_num to 1 step -1 do
+        bin = bins[b]
+
+        if !(bin >= min and bin <= max) then do
+          ExcludeArrayElements(bins, b, 1)
+          if labels <> null then ExcludeArrayElements(labels, b, 1)
+        end
+      end
+    end
+
+    // If 'bins' is a number, then convert to an array of values
+    if bin_type = "int" then do
+      size = (max - min) / bin_num
+
+      bins = {min}
+      for b = 1 to bin_num do
+        bins = bins + {min + size * b}
+      end
+    end
+
+    // Create 'labels' if it is not provided
+    if labels = null then do
+      for b = 1 to bin_num do
+        labels = labels + {b}
+      end
+    end
+
+    // Convert 'bins' into from and to arrays and perform the binning process
+    a_from = bins
+    a_to = ExcludeArrayElements(bins, 1, 1) + {max}
+    for i = 1 to labels.length do
+      label = labels[i]
+      from = a_from[i]
+      to = if (i = labels.length)
+        then a_to[i] + .01
+        else a_to[i]
+
+      v_label = if (self.tbl.(in_field) >= from and self.tbl.(in_field) < to)
+        then label else v_label
+    end
+
+    self.mutate("bin", v_label)
+  EndItem
+
 endClass
 
 
@@ -1116,7 +1304,7 @@ Runs through all the methods and writes out results
 Macro "test"
 
   // Input files used in some tests
-  dir = "C:\\projects/gplyr/unit_test_data"
+  dir = "C:\\projects/gisdk_tools/gplyr/unit_test_data"
   csv_file = dir + "/example.csv"
   bin_file = dir + "/example.bin"
   mtx_file = dir + "/example.mtx"
@@ -1287,6 +1475,17 @@ Macro "test"
     if df.tbl.Blue[a] <> answer[a] then Throw("test: spread() failed")
   end
 
+  // test gather
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  df.spread("Color", "Count", 0)
+  df.gather({"Red", "Yellow", "Blue"}, "Color", "Count")
+  if df.tbl[3][1] <> "Color" then Throw("test: gather() failed")
+  answer = {0, 100, 50, 35, 0, 75, 0, 115, 25}
+  for a = 1 to answer.length do
+    if df.tbl.Count[a] <> answer[a] then Throw("test: gather() failed")
+  end
+
   // test bind_rows
   df = CreateObject("df")
   df.read_csv(csv_file)
@@ -1297,6 +1496,36 @@ Macro "test"
   answer = {50, 75, 25, 100, 115, 35, 50, 75, 25, 100, 115, 35}
   for a = 1 to answer.length do
     if df.tbl.Count[a] <> answer[a] then Throw("test: bind_rows() failed")
+  end
+
+  // test bin_field (when 'bins' is just a number and no labels)
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  opts = null
+  opts.in_field = "Count"
+  opts.bins = 3
+  df.bin_field(opts)
+  answer = {1, 2, 1, 3, 3, 1}
+  for a = 1 to answer.length do
+    if df.tbl.bin[a] <> answer[a] then Throw("test: bin_field() failed")
+  end
+  // test2 (add lables)
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  opts.labels = {"A", "B", "C"}
+  df.bin_field(opts)
+  answer = {"A", "B", "A", "C", "C", "A"}
+  for a = 1 to answer.length do
+    if df.tbl.bin[a] <> answer[a] then Throw("test: bin_field() failed")
+  end
+  // test3 (when 'bins' is a list and values outside range)
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  opts.bins = {0, 30, 150}
+  df.bin_field(opts)
+  answer = {"B", "B", "A", "B", "B", "B"}
+  for a = 1 to answer.length do
+    if df.tbl.bin[a] <> answer[a] then Throw("test: bin_field() failed")
   end
 
   ShowMessage("Passed Tests")

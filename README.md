@@ -79,7 +79,9 @@ left_join
 unite  
 separate  
 spread  
+gather
 bind_rows
+bin_field
 
 ### Utility
 is_empty  
@@ -87,4 +89,5 @@ nrow
 ncol  
 colnames  
 check  
+check_name
 in
