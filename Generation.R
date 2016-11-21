@@ -1,4 +1,4 @@
-# R script to calculate network speeds and capacities
+# R script to calculate joint distributions used in trip production model
 
 # Load packages
 library(dplyr)
@@ -46,11 +46,13 @@ for (name in margNames) {
 }
 
 # Perform IPF using the ipfr package
-final <- ipf(seedTbl, targets, verbose = TRUE)
 
 # Sleep for 10 seconds to allow user to see the output if desired
 cat("\n Waiting 10 seconds")
 Sys.sleep(10)
+
+# write out the full, disagg table
+write_csv(final, paste0(outputDir, "/HHDisaggregation.csv"))
 
 # Create wrk x veh table for work trips
 work_tbl <- final %>%
