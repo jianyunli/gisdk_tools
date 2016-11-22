@@ -46,6 +46,7 @@ for (name in margNames) {
 }
 
 # Perform IPF using the ipfr package
+final <- ipf(seedTbl, targets, verbose = TRUE)
 
 # Sleep for 10 seconds to allow user to see the output if desired
 cat("\n Waiting 10 seconds")
