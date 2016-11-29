@@ -421,13 +421,33 @@ to
 copy_files
   "True" or "False"
   Whether or not to copy files
+  Defaults to false
+
+subdirectories
+  "True" or "False"
+  Whether or not to include subdirectories
+  Defaults to "True"
 */
 
-Macro "Copy Directory" (from, to, copy_files)
+Macro "Copy Directory" (from, to, copy_files, subdirectories)
+
+  if copy_files = null then copy_files = "False"
+  if subdirectories = null then subdirectories = "True"
+
+  // if from or to end with a "\" remove it
+  if Right(from, 1) = "\\" then do
+    length = StringLength(from)
+    from = Substring(from, 1, length - 1)
+  end
+  if Right(to, 1) = "\\" then do
+    length = StringLength(to)
+    to = Substring(to, 1, length - 1)
+  end
 
   from = "\"" +  from + "\""
   to = "\"" +  to + "\""
-  cmd = "cmd /C xcopy " + from + " " + to + " /e /i /y /q"
+  cmd = "cmd /C xcopy " + from + " " + to + " /i /y"
+  if subdirectories then cmd = cmd + " /e"
   if !copy_files then cmd = cmd + " /t"
   opts.Minimize = "True"
   RunProgram(cmd, opts)
