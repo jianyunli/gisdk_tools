@@ -329,11 +329,11 @@ Macro "Calc DC Matrix Cores" (dist_cap, skim_file, period)
 EndMacro
 
 /*
-Combines DC output matrices
+Combines distribution output matrices
 Creates a single matrix for the time period.  The matrix has a core
 for each purpose.
 
-The dc output matrices to aggregate must follow the naming convention
+The distribution output matrices to aggregate must follow the naming convention
 used by the other macros in this library:
   "trips_" + purp + "_" + period + ".mtx"
   e.g. "trips_HBW_AM.mtx" or "trips_CV_Daily.mtx"
