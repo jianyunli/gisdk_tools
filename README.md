@@ -89,5 +89,5 @@ nrow
 ncol  
 colnames  
 check  
-check_name
+check_name  
 in

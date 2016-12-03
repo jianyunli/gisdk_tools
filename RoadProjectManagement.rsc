@@ -49,7 +49,9 @@ To code a link for deletion in a project, all project attribute fields
 (other than ID) should be set to null.  Similarly, future-year-only links
 should have their base year attributes set to null.
 
-Projects listed first in the CSV have priority if two or more projects overlap.
+Projects listed last in the CSV have priority if two or more projects overlap.
+This is because many application scenarios involve adding a project to the
+end of the project list to test it's effect.
 */
 
 Macro "Road Project Management" (MacroOpts)
@@ -76,10 +78,6 @@ Macro "Road Project Management" (MacroOpts)
     Throw("Project groups fixed. Start the export process again.")
   end
 
-  // Add "UpdatedWithP" field
-  a_fields = {{"UpdatedWithP", "Integer", 10, }}
-  RunMacro("Add Fields", lLyr, a_fields)
-
   // Determine the project groupings and attributes on the link layer.
   // Remove ID from the list of attributes to update.
   projGroups = RunMacro("Get Project Groups", lLyr)
@@ -87,8 +85,16 @@ Macro "Road Project Management" (MacroOpts)
   attrList = ExcludeArrayElements(attrList, 1, 1)
 
   // Loop over each project ID
-  for p = 1 to v_projIDs.length do
+  for p = v_projIDs.length to 1 step -1 do
     projID = v_projIDs[p]
+    type = TypeOf(projID)
+
+    // Add "UpdatedWithP" field
+    if p = v_projIDs.length then do
+      type2 = if type = "String" then "Character" else "Integer"
+      a_fields = {{"UpdatedWithP", type2, 10, }}
+      RunMacro("Add Fields", lLyr, a_fields)
+    end
 
     // Loop over each project group (group of project fields)
     for g = 1 to projGroups.length do
@@ -101,7 +107,7 @@ Macro "Road Project Management" (MacroOpts)
       if TypeOf(projID) <> "string" then
         qry = "Select * where " + pgroup + "ID = " + String(projID)
         else qry = "Select * where " + pgroup + "ID = '" + projID + "'"
-      qry = qry + " and UpdatedWithP <> 1"
+      qry = qry + " and UpdatedWithP = null"
       n = SelectByQuery("updateLinks", "Several", qry)
       if n > 0 then do
 
@@ -117,8 +123,12 @@ Macro "Road Project Management" (MacroOpts)
         // Mark the UpdatedWithP field to prevent these links from being
         // updated again in subsequent loops.
         opts = null
-        opts.Constant = 1
-        v_vec = Vector(v_vec.length, "Long", opts)
+        opts.Constant = projID
+        if TypeOf(projID) = "string" then do
+          v_vec = Vector(v_vec.length, "String", opts)
+        end else do
+          v_vec = Vector(v_vec.length, "Long", opts)
+        end
         SetDataVector(lLyr + "|updateLinks", "UpdatedWithP", v_vec, )
       end
     end
