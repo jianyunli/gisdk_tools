@@ -329,6 +329,10 @@ Macro "Balance" (MacroOpts)
     total_p = VectorStatistic(v_p, "sum", )
     total_a = VectorStatistic(v_a, "sum", )
 
+    // Store unbalanced Ps and As in a table to be written out
+    unbalanced.(pfield) = v_p
+    unbalanced.(afield) = v_a
+
     // Balance
     if bal = "to productions" then do
       factor = total_p / total_a
@@ -354,10 +358,12 @@ Macro "Balance" (MacroOpts)
     out_f = out_f + {factor}
   end
 
-  // Convert output arrays to vectors and return
-  out_p = A2V(out_p)
-  out_a = A2V(out_a)
-  out_f = A2V(out_f)
-  return({out_p, out_a, out_f})
+  // Convert output arrays to vectors and return a named array
+  tbl = null
+  tbl.p = A2V(out_p)
+  tbl.a = A2V(out_a)
+  tbl.factor = A2V(out_f)
+
+  return({tbl, unbalanced})
 
 EndMacro
