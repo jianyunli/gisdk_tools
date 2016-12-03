@@ -11,7 +11,7 @@ library(tcadr)
 # by the model. Collect arguments passed.
 args <- commandArgs(trailingOnly = TRUE)
 hwyBIN <- args[1]
-outputDir <- args[2]
+output_dir <- args[2]
 
 # read the network bin file into a data frame
 df <- read_tcad(hwyBIN)
@@ -83,4 +83,4 @@ df <- df %>%
 
 # Write the capacities out to a CSV
 # Implement the write_bin procedure when available
-write_csv(df, paste0(outputDir, "/HourlyCapacities.csv"))
+write_csv(df, paste0(output_dir, "/HourlyCapacities.csv"))

@@ -32,10 +32,10 @@ Macro "Close All"
   end
 
   // Delete any DCC files in the scenario folder
-  // This requires the global variable ModelArgs be established in
+  // This requires the global variable MODELARGS be established in
   // your project code, but will simply do nothing if it doesn't exist.
-  if ModelArgs.scenDir <> null then do
-    a_files = RunMacro("Catalog Files", ModelArgs.scenDir, {"DCC"})
+  if MODELARGS.scen_dir <> null then do
+    a_files = RunMacro("Catalog Files", MODELARGS.scen_dir, {"DCC"})
     for f = 1 to a_files.length do
       DeleteFile(a_files[f])
     end
@@ -76,19 +76,19 @@ Checks the UI date against the rsc/lst files used to create it.  If any of the
 rsc files are newer than the UI, the UI should be recompiled.
 
 Inputs:
-uiDBD       complete path to the UI file
+ui_dbd       complete path to the UI file
 scriptDir   path to folder containing RSC files
 
 Returns:
 Shows a warning message if the UI is out of date.
 */
 
-Macro "Recompile UI?" (uiDBD, scriptDir)
+Macro "Recompile UI?" (ui_dbd, scriptDir)
 
   a_files = RunMacro("Catalog Files", scriptDir, {"rsc", "lst"})
   // Check the *.1 file instead of *.dbd.
   // The .dbd file doesn't get updated on recompile.
-  a_uiInfo = GetFileInfo(Substitute(uiDBD, ".dbd", ".1", ))
+  a_uiInfo = GetFileInfo(Substitute(ui_dbd, ".dbd", ".1", ))
   uiTime = a_uiInfo[9]
   a_units = {"year", "month", "day", "hour", "minute", "second", "millisecond"}
   recompile = "False"
@@ -261,16 +261,16 @@ Writes out an options array to a CSV file.
 Input
 Parameters      Array of parameters to write
 parameterFile   File to write parameters out to
-colNames        Array of column names.  Must end with "Value" and "Description".
+col_names        Array of column names.  Must end with "Value" and "Description".
 */
 
-Macro "Write Parameter File" (Parameters, parameterFile, colNames)
+Macro "Write Parameter File" (Parameters, parameterFile, col_names)
 
   // Write column names
   file = OpenFile(parameterFile, "w")
-  str = colNames[1]
-  for i = 2 to colNames.length do
-    str = str + "," + colNames[i]
+  str = col_names[1]
+  for i = 2 to col_names.length do
+    str = str + "," + col_names[i]
   end
   WriteLine(file, str)
 
@@ -320,16 +320,16 @@ Removes a field from a view/layer
 
 Input
 viewName  Name of view or layer (must be open)
-fieldName Name of the field to remove. Can pass string or array of strings.
+field_name Name of the field to remove. Can pass string or array of strings.
 */
 
-Macro "Drop Field" (viewName, fieldName)
+Macro "Drop Field" (viewName, field_name)
   a_str = GetTableStructure(viewName)
 
-  if TypeOf(fieldName) = "string" then fieldName = {fieldName}
+  if TypeOf(field_name) = "string" then field_name = {field_name}
 
-  for fn = 1 to fieldName.length do
-    name = fieldName[fn]
+  for fn = 1 to field_name.length do
+    name = field_name[fn]
 
     for i = 1 to a_str.length do
       a_str[i] = a_str[i] + {a_str[i][1]}
@@ -514,9 +514,9 @@ Macro "Perma Join" (masterFile, mID, slaveFile, sID, overwrite)
 
   // Open the master file
   if type = "dbd" then do
-    {nLyr, master} = GetDBLayers(masterFile)
+    {nlyr, master} = GetDBLayers(masterFile)
     master = AddLayerToWorkspace(master, masterFile, master)
-    nLyr = AddLayerToWorkspace(nLyr, masterFile, nLyr)
+    nlyr = AddLayerToWorkspace(nlyr, masterFile, nlyr)
   end else do
     masterDCB = Substitute(masterFile, ".bin", ".DCB", )
     master = OpenTable("master", "FFB", {masterFile, })
@@ -583,21 +583,21 @@ Macro "Perma Join" (masterFile, mID, slaveFile, sID, overwrite)
     opts.Ordinal = "True"
     JoinTableToLayer(masterFile, master, "FFB", tempBIN, tempDCB, mID, opts)
     master = AddLayerToWorkspace(master, masterFile, master)
-    nLyr = AddLayerToWorkspace(nLyr, masterFile, nLyr)
+    nlyr = AddLayerToWorkspace(nlyr, masterFile, nlyr)
     RunMacro("Drop Field", master, "Length:1")
     RunMacro("Drop Field", master, "Dir:1")
 
     // Re-export the table to clean up the bin file
     new_dbd = a_path[1] + a_path[2] + a_path[3] + "_temp" + a_path[4]
     {l_names, l_specs} = GetFields(master, "All")
-    {n_names, n_specs} = GetFields(nLyr, "All")
+    {n_names, n_specs} = GetFields(nlyr, "All")
     opts = null
     opts.[Field Spec] = l_specs
-    opts.[Node Name] = nLyr
+    opts.[Node Name] = nlyr
     opts.[Node Field Spec] = n_specs
     ExportGeography(master + "|", new_dbd, opts)
     DropLayerFromWorkspace(master)
-    DropLayerFromWorkspace(nLyr)
+    DropLayerFromWorkspace(nlyr)
     DeleteDatabase(masterFile)
     CopyDatabase(new_dbd, masterFile)
     DeleteDatabase(new_dbd)
@@ -631,18 +631,18 @@ If the script fails, it adds a pause to the batch and re-runs so the error is
 visible.
 
 Input
-RScriptExe  String  Path to "Rscript.exe"
-RScript     String  Path to the actual r script "*.R"
+rscriptexe  String  Path to "Rscript.exe"
+rscript     String  Path to the actual r script "*.R"
 OtherArgs   Array   Array of other arguments to pass to the R environment.
                     These arguments will be specific to the R script run.
                     Can be null.
 */
 
-Macro "Run R Script" (RScriptExe, RScript, OtherArgs)
+Macro "Run R Script" (rscriptexe, rscript, OtherArgs)
 
   // Create the command line call
   // Put each argument in quotes to handle potential spaces
-  command = "\"" + RScriptExe + "\" \"" + RScript + "\""
+  command = "\"" + rscriptexe + "\" \"" + rscript + "\""
   for i = 1 to OtherArgs.length do
     command = command + " \"" + OtherArgs[i] + "\""
   end
@@ -666,7 +666,7 @@ Macro "Run R Script" (RScriptExe, RScript, OtherArgs)
     CloseFile(bat)
     RunProgram(batFile, )
 
-    a_path = SplitPath(RScript)
+    a_path = SplitPath(rscript)
     file = a_path[3] + a_path[4]
 
     Throw(

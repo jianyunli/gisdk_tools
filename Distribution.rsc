@@ -15,11 +15,11 @@ Depends
 
 Macro "Gravity" (MacroOpts)
 
-  seBIN = MacroOpts.seBIN
+  se_bin = MacroOpts.se_bin
   skim_file = MacroOpts.skim_file
   param_file = MacroOpts.param_file
   period = MacroOpts.period
-  outputDir = MacroOpts.outputDir
+  output_dir = MacroOpts.output_dir
 
   // Read the parameter file
   grav_params = RunMacro("Read Parameter File", param_file)
@@ -27,7 +27,7 @@ Macro "Gravity" (MacroOpts)
   // Open the skim matrix and se table
   skim_mtx = OpenMatrix(skim_file, )
   {ri, ci} = GetMatrixIndex(skim_mtx)
-  vw_se = OpenTable("ScenarioSE", "FFB", {seBIN})
+  vw_se = OpenTable("ScenarioSE", "FFB", {se_bin})
 
   // Loop over each purpose found in the param file
   for p = 1 to grav_params.length do
@@ -40,7 +40,7 @@ Macro "Gravity" (MacroOpts)
     cur = CreateMatrixCurrency(skim_mtx, imp_core, ri, ci, )
 
     Opts = null
-    Opts.Input.[PA View Set] = {seBIN, vw_se}
+    Opts.Input.[PA View Set] = {se_bin, vw_se}
     Opts.Input.[FF Tables] = {}
     Opts.Input.[Imp Matrix Currencies] = {cur}
     Opts.Input.[FF Matrix Currencies] = {}
@@ -59,7 +59,7 @@ Macro "Gravity" (MacroOpts)
     Opts.Field.[FF Table Fields] = {}
     Opts.Output.[Output Matrix].Label = purp + " Gravity Matrix"
     Opts.Output.[Output Matrix].Compression = 1
-    out_file = outputDir + "/trips_" + purp + "_" + period + ".mtx"
+    out_file = output_dir + "/trips_" + purp + "_" + period + ".mtx"
     Opts.Output.[Output Matrix].[File Name] = out_file
     ret_value = RunMacro("TCB Run Procedure", "Gravity", Opts, &Ret)
     if !ret_value then Throw("Gravity model failed")
@@ -74,7 +74,7 @@ The object name is "NLM.Model".  You can use GetClassMethodNames("NLM.Model") to
 see all the methods available, but there is no help for them.  Caliper has
 been willing to help explain some of them and how to use them.
 
-The production and attraction field names are assumed to be in the seBIN file
+The production and attraction field names are assumed to be in the se_bin file
 and use the following general format:
   "d_" + purp + "(a)_" + tod
   e.g.
@@ -89,11 +89,11 @@ MacroOpts
     String
     Time period - e.g. "AM"
 
-  seBIN
+  se_bin
     String
     Path of the se table
 
-  outputDir
+  output_dir
     String
     Path of the folder to place output
 
@@ -119,8 +119,8 @@ Macro "Destination Choice" (MacroOpts)
 
   // Extract arguments from named array
   period = MacroOpts.period
-  seBIN = MacroOpts.seBIN
-  outputDir = MacroOpts.outputDir
+  se_bin = MacroOpts.se_bin
+  output_dir = MacroOpts.output_dir
   param_file = MacroOpts.param_file
   template_dcm = MacroOpts.template_dcm
   skim_file = MacroOpts.skim_file
@@ -129,14 +129,14 @@ Macro "Destination Choice" (MacroOpts)
   dc_params = RunMacro("Read Parameter File", param_file)
   num_purposes = dc_params.length
 
-  // Open the seBIN file and add a dc_size and shadow price column
-  seTbl = OpenTable("ScenarioSE", "FFB", {seBIN})
+  // Open the se_bin file and add a dc_size and shadow price column
+  se_tbl = OpenTable("ScenarioSE", "FFB", {se_bin})
   a_fields = {
     {"dc_size", "Real", 10, 2,,,,"dc size term|varies by purp and tod"},
     {"shadow_price", "Real", 10, 2,,,,"dc shadow price|varies by purp and tod"}
   }
-  RunMacro("TCB Add View Fields", {seTbl, a_fields})
-  CloseView(seTbl)
+  RunMacro("TCB Add View Fields", {se_tbl, a_fields})
+  CloseView(se_tbl)
 
   for p = 1 to num_purposes do
     purp = dc_params[p][1]
@@ -151,20 +151,20 @@ Macro "Destination Choice" (MacroOpts)
 
     // Fill dc_size column with appropriate attraction info
     // Fill shadow price with 0s
-    seTbl = OpenTable("ScenarioSE", "FFB", {seBIN})
-    v_attr = nz(GetDataVector(seTbl + "|", attr_field, ))
+    se_tbl = OpenTable("ScenarioSE", "FFB", {se_bin})
+    v_attr = nz(GetDataVector(se_tbl + "|", attr_field, ))
     v_attr = if (v_attr = 0) then 0 else log(v_attr)
-    SetDataVector(seTbl + "|", "dc_size", v_attr, )
+    SetDataVector(se_tbl + "|", "dc_size", v_attr, )
     v_sp = if (nz(v_attr) >= 0) then 0 else 0
-    SetDataVector(seTbl + "|", "shadow_price", v_sp, )
-    CloseView(seTbl)
+    SetDataVector(se_tbl + "|", "shadow_price", v_sp, )
+    CloseView(se_tbl)
 
     // Calculate required DC based on capped distance
     RunMacro("Calc DC Matrix Cores", params.dist_cap, skim_file, period)
 
     // Create a copy of the template dcm file and update its
     // attributes.
-    dcm = outputDir + "/" + purp + "_" + period + ".dcm"
+    dcm = output_dir + "/" + purp + "_" + period + ".dcm"
     CopyFile(template_dcm, dcm)
 
     // Create model object.  The segment is always "*"
@@ -204,24 +204,24 @@ Macro "Destination Choice" (MacroOpts)
       Opts.Flag.Aggregate = 1
       Opts.Flag.[Destination Choice] = 1
       Opts.Input.[skim_mtx Matrix] = skim_file
-      Opts.Input.[zone_tbl Set] = {seBIN, "ScenarioSE"}
+      Opts.Input.[zone_tbl Set] = {se_bin, "ScenarioSE"}
       // Probability matrix
       file_name = "probabilities_" + purp + "_" + period + ".MTX"
-      file_path = outputDir + "/" + file_name
+      file_path = output_dir + "/" + file_name
       Opts.Output.[Probability Matrix].Label = purp + " " + period + " Probability"
       Opts.Output.[Probability Matrix].Compression = 1
       Opts.Output.[Probability Matrix].FileName = file_name
       Opts.Output.[Probability Matrix].[File Name] = file_path
       // Trips matrix
       trip_file = "trips_" + purp + "_" + period + ".MTX"
-      trip_path = outputDir + "/" + trip_file
+      trip_path = output_dir + "/" + trip_file
       Opts.Output.[Applied Totals Matrix].Label = purp + " " + period + " Trips"
       Opts.Output.[Applied Totals Matrix].Compression = 1
       Opts.Output.[Applied Totals Matrix].FileName = file_name
       Opts.Output.[Applied Totals Matrix].[File Name] = trip_path
       // Utility matrix
       file_name = "utilities_" + purp + "_" + period + ".MTX"
-      file_path = outputDir + "/" + file_name
+      file_path = output_dir + "/" + file_name
       Opts.Output.[Utility Matrix].Label = purp + " " + period + " Utility"
       Opts.Output.[Utility Matrix].Compression = 1
       Opts.Output.[Utility Matrix].FileName = file_name
@@ -233,13 +233,13 @@ Macro "Destination Choice" (MacroOpts)
       // Export column marginals to table
       m = OpenMatrix(trip_path,)
       mc = CreateMatrixCurrency(m,,,,)
-      marginal_bin = outputDir + "/marginal.bin"
+      marginal_bin = output_dir + "/marginal.bin"
       ExportMatrix(mc,, "Columns", "FFB", marginal_bin, {{"Marginal", "Sum"}})
       mc = null
       m = null
 
       // Open matrix marginal table table and join to the se table
-      vw_se = OpenTable("se", "FFB", {seBIN})
+      vw_se = OpenTable("se", "FFB", {se_bin})
       vw_marg = OpenTable("temp", "FFB", {marginal_bin,},)
       {flds, specs} = GetFields(vw_marg,)
       SetView(vw_se)
@@ -268,10 +268,10 @@ Macro "Destination Choice" (MacroOpts)
   end
 
   // Clean up workspace
-  seTbl = OpenTable("se", "FFB", {seBIN})
-  RunMacro("Drop Field", seTbl, "dc_size")
-  RunMacro("Drop Field", seTbl, "shadow_price")
-  CloseView(seTbl)
+  se_tbl = OpenTable("se", "FFB", {se_bin})
+  RunMacro("Drop Field", se_tbl, "dc_size")
+  RunMacro("Drop Field", se_tbl, "shadow_price")
+  CloseView(se_tbl)
   DeleteFile(marginal_bin)
   DeleteFile(Substitute(marginal_bin, ".bin", ".DCB", ))
 EndMacro
@@ -369,8 +369,8 @@ Macro "Aggregate Distribution Matrices" (MacroOpts)
   if TypeOf(params) <> "array"
     then Throw("'params' must be a string or array of strings")
   period = MacroOpts.period
-  outputDir = MacroOpts.outputDir
-  final_mtx_file = outputDir + "/_trips_all_" + period + ".mtx"
+  output_dir = MacroOpts.output_dir
+  final_mtx_file = output_dir + "/_trips_all_" + period + ".mtx"
 
   // Collect purposes from the param files
   for p = 1 to params.length do
@@ -397,7 +397,7 @@ Macro "Aggregate Distribution Matrices" (MacroOpts)
     purp = a_purps[p]
 
     // Open matrix and create currency of first core
-    cur_mtx_file = outputDir + "/trips_" + purp + "_" + period + ".mtx"
+    cur_mtx_file = output_dir + "/trips_" + purp + "_" + period + ".mtx"
     mtx = OpenMatrix(cur_mtx_file, )
     {ri, ci} = GetMatrixIndex(mtx)
     a_corenames = GetMatrixCoreNames(mtx)

@@ -8,7 +8,7 @@ MacroOpts
   Options Array
   Containing all arguments needed
 
-  MacroOpts.seBIN
+  MacroOpts.se_bin
     String
     Full path to the scenario se BIN file
 
@@ -16,11 +16,11 @@ MacroOpts
     String
     Field name in the taz layer that has households
 
-  MacroOpts.MTables
+  MacroOpts.mtables
     Opts Array
     Links a field from the SE table to it's marginal table.
     For example:
-    MTables.HHPopulation = dir + "/disagg_hh_size.csv"
+    mtables.HHPopulation = dir + "/disagg_hh_size.csv"
     This links the hh_size.csv marginal table to the
     "HHPopulation" field in the taz layer.
 
@@ -37,12 +37,12 @@ Macro "HH Marginal Creation" (MacroOpts)
 
   // Check that the necessary fields are present in the se table
   a_reqFields = {MacroOpts.hhField}
-  for t = 1 to MacroOpts.MTables.length do
-    a_reqFields = a_reqFields + {MacroOpts.MTables[t][1]}
+  for t = 1 to MacroOpts.mtables.length do
+    a_reqFields = a_reqFields + {MacroOpts.mtables[t][1]}
   end
 
-  seTbl = OpenTable("se", "FFB", {MacroOpts.seBIN})
-  a_fields = GetFields(seTbl, "All")
+  se_tbl = OpenTable("se", "FFB", {MacroOpts.se_bin})
+  a_fields = GetFields(se_tbl, "All")
   a_fields = a_fields[1]
   string = "The following fields are missing: "
   missing = "False"
@@ -60,12 +60,12 @@ Macro "HH Marginal Creation" (MacroOpts)
     Throw(string)
   end
 
-  CloseView(seTbl)
+  CloseView(se_tbl)
 
   // for each marginal table
-  for m = 1 to MacroOpts.MTables.length do
-    margName = MacroOpts.MTables[m][1]
-    tblFile = MacroOpts.MTables.(margName)
+  for m = 1 to MacroOpts.mtables.length do
+    margName = MacroOpts.mtables[m][1]
+    tblFile = MacroOpts.mtables.(margName)
 
     // Open table and get marginal category names.  Also get the max/min
     // avg values included in the table.
@@ -80,42 +80,42 @@ Macro "HH Marginal Creation" (MacroOpts)
 
     // Before joining, delete any category fields that might exist
     // from a previous run.
-    seTbl = OpenTable("se", "FFB", {MacroOpts.seBIN})
-    RunMacro("Drop Field", seTbl, a_catnames)
+    se_tbl = OpenTable("se", "FFB", {MacroOpts.se_bin})
+    RunMacro("Drop Field", se_tbl, a_catnames)
 
     // Calculate an average field in order to join the marginal table
     // For example, if the current marginal is workers, calculate
     // an average workers / household for each zone.  Also, cap the calculated
     // average to the max/min included in the disagg table.
-    v_hh = GetDataVector(seTbl + "|", MacroOpts.hhField, )
-    v_marg = GetDataVector(seTbl + "|", margName, )
+    v_hh = GetDataVector(se_tbl + "|", MacroOpts.hhField, )
+    v_marg = GetDataVector(se_tbl + "|", margName, )
     v_mavg = round(v_marg / v_hh, 2)
     v_mavg = if (v_mavg = null) then 0 else v_mavg
     v_mavg = min(v_mavg, big)
     v_mavg = max(v_mavg, small)
     a_fields = {{"mavg", "Real", 10, 2}}
-    RunMacro("TCB Add View Fields", {seTbl, a_fields})
-    SetDataVector(seTbl + "|", "mavg", v_mavg, )
+    RunMacro("TCB Add View Fields", {se_tbl, a_fields})
+    SetDataVector(se_tbl + "|", "mavg", v_mavg, )
 
 
-    CloseView(seTbl)
-    RunMacro("Perma Join", MacroOpts.seBIN, "mavg", tblFile, "avg")
-    seTbl = OpenTable("se", "FFB", {MacroOpts.seBIN})
-    RunMacro("Drop Field", seTbl, "mavg")
-    RunMacro("Drop Field", seTbl, "avg")
+    CloseView(se_tbl)
+    RunMacro("Perma Join", MacroOpts.se_bin, "mavg", tblFile, "avg")
+    se_tbl = OpenTable("se", "FFB", {MacroOpts.se_bin})
+    RunMacro("Drop Field", se_tbl, "mavg")
+    RunMacro("Drop Field", se_tbl, "avg")
 
     // Convert the category fields in the se table from percents
     // to households by multiplying by the household field.
     for c = 1 to a_catnames.length do
       catname = a_catnames[c]
 
-      v_pct = GetDataVector(seTbl + "|", catname, )
+      v_pct = GetDataVector(se_tbl + "|", catname, )
       v_hhs = v_pct * v_hh
-      SetDataVector(seTbl + "|", catname, v_hhs, )
+      SetDataVector(se_tbl + "|", catname, v_hhs, )
     end
   end
 
-  CloseView(seTbl)
+  CloseView(se_tbl)
 EndMacro
 
 
@@ -125,28 +125,28 @@ for each TAZ.
 
 Input:
 MacroOpts
-  MacroOpts.RScriptExe
-  MacroOpts.RScript
-  MacroOpts.seBIN
+  MacroOpts.rscriptexe
+  MacroOpts.rscript
+  MacroOpts.se_bin
   MacroOpts.Seed
-  MacroOpts.outputDir
+  MacroOpts.output_dir
 */
 Macro "HH Joint Distribution" (MacroOpts)
 
   // Delete R output if it exists
-  rCSV = MacroOpts.outputDir + "/HHDisaggregation.csv"
+  rCSV = MacroOpts.output_dir + "/HHDisaggregation.csv"
   rDCC = Substitute(rCSV, ".csv", ".DCC",)
   if GetFileInfo(rCSV) <> null then DeleteFile(rCSV)
   if GetFileInfo(rDCC) <> null then DeleteFile(rDCC)
 
   // Prepare arguments for "Run R Script"
-  RScriptExe = MacroOpts.RScriptExe
-  RScript = MacroOpts.RScript
-  seBIN = MacroOpts.seBIN
+  rscriptexe = MacroOpts.rscriptexe
+  rscript = MacroOpts.rscript
+  se_bin = MacroOpts.se_bin
   seedTbl = MacroOpts.Seed
-  outputDir = MacroOpts.outputDir
-  OtherArgs = {seBIN, seedTbl, outputDir}
-  RunMacro("Run R Script", RScriptExe, RScript, OtherArgs)
+  output_dir = MacroOpts.output_dir
+  OtherArgs = {se_bin, seedTbl, output_dir}
+  RunMacro("Run R Script", rscriptexe, rscript, OtherArgs)
 EndMacro
 
 
@@ -156,7 +156,7 @@ Creates trip productions by purpose for residents.
 MacroOpts
 Options array containing all arguments to the function
 
-  MacroOpts.seBIN
+  MacroOpts.se_bin
     String
     Path to se bin file
 
@@ -168,7 +168,7 @@ Options array containing all arguments to the function
     String
     Path to CSV containing the non-work rates
 
-  MacroOpts.outputDir
+  MacroOpts.output_dir
     String
     Path to output folder where temporary files are placed
 */
@@ -204,7 +204,7 @@ Macro "Cross-Classification Method" (MacroOpts)
 
     disagTbl = OpenTable(
       "disag", "CSV",
-      {MacroOpts.outputDir + "/" + fileName}
+      {MacroOpts.output_dir + "/" + fileName}
     )
 
     // Join the rate table to the disagg output
@@ -240,10 +240,10 @@ Macro "Cross-Classification Method" (MacroOpts)
     // Spread the table
     df.spread("purpose", "sum_trips", 0)
     // Write table to CSV and join to se table
-    outputFile = MacroOpts.outputDir + "/trips.csv"
+    outputFile = MacroOpts.output_dir + "/trips.csv"
     df.write_csv(outputFile)
     RunMacro("Perma Join",
-      MacroOpts.seBIN, "ID",
+      MacroOpts.se_bin, "ID",
       outputFile, "ID"
     )
 
@@ -265,7 +265,7 @@ Macro "Cross-Classification Method" (MacroOpts)
         "See " + rateTblShort + " for more info"
       }
     end
-    RunMacro("Add Field Description", MacroOpts.seBIN, field, description)
+    RunMacro("Add Field Description", MacroOpts.se_bin, field, description)
 
     RunMacro("Close All")
     DeleteFile(outputFile)

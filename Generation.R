@@ -10,14 +10,14 @@ library(tcadr)
 # The script is called from the command line
 # by the model. Collect arguments passed.
 args <- commandArgs(trailingOnly = TRUE)
-seBIN <- args[1]
+se_bin <- args[1]
 seedTbl <- args[2]
-outputDir <- args[3]
+output_dir <- args[3]
 
 # for testing
-# seBIN <- "C:\\projects\\Hickory\\HickoryRepo\\scenarios\\Base_2015\\outputs\\sedata\\ScenarioSE.bin"
+# se_bin <- "C:\\projects\\Hickory\\HickoryRepo\\scenarios\\Base_2015\\outputs\\sedata\\ScenarioSE.bin"
 # seedTbl <- "C:\\projects\\Hickory\\HickoryRepo\\scenarios\\Base_2015\\inputs\\generation\\disagg_hh_joint.csv"
-# outputDir <- "C:\\projects\\Hickory\\HickoryRepo\\scenarios\\Base_2015\\outputs\\generation"
+# output_dir <- "C:\\projects\\Hickory\\HickoryRepo\\scenarios\\Base_2015\\outputs\\generation"
 
 # Read in the seed table and use it to determine marginals
 seedTbl <- read_csv(seedTbl)
@@ -28,12 +28,12 @@ for (name in margNames){
 }
 
 # read the se bin file into a data frame
-seTbl <- read_tcad(seBIN)
+se_tbl <- read_tcad(se_bin)
 # Change any NAs to zero
-seTbl[is.na(seTbl)] <- 0
+se_tbl[is.na(se_tbl)] <- 0
 
 # Create a marginal table from se table
-margTbl <- seTbl %>%
+margTbl <- se_tbl %>%
   select(ID, one_of(marg_cats))
 
 # Break the marginal table up into a list of data frames for ipf()
@@ -53,16 +53,16 @@ cat("\n Waiting 10 seconds")
 Sys.sleep(10)
 
 # write out the full, disagg table
-write_csv(final, paste0(outputDir, "/HHDisaggregation.csv"))
+write_csv(final, paste0(output_dir, "/HHDisaggregation.csv"))
 
 # Create wrk x veh table for work trips
 work_tbl <- final %>%
   group_by(ID, wrk, veh) %>%
   summarize(HH = sum(weight))
-write_csv(work_tbl, paste0(outputDir, "/wrk_by_veh.csv"))
+write_csv(work_tbl, paste0(output_dir, "/wrk_by_veh.csv"))
 
 # Create siz x veh table for non-work trips
 nonwork_tbl <- final %>%
   group_by(ID, siz, veh) %>%
   summarize(HH = sum(weight))
-write_csv(nonwork_tbl, paste0(outputDir, "/siz_by_veh.csv"))
+write_csv(nonwork_tbl, paste0(output_dir, "/siz_by_veh.csv"))

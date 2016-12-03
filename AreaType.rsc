@@ -7,15 +7,15 @@ Collection of tools often used related to area type
 
 Inputs:
 MacroOpts             Options array with the following fields
-  MacroOpts.tazDBD      File    TAZ file name
-  MacroOpts.seBIN       File    SE BIN file name
+  MacroOpts.taz_dbd      File    TAZ file name
+  MacroOpts.se_bin       File    SE BIN file name
   MacroOpts.areaField   String  Name of area field in TAZ layer
   MacroOpts.hhField     String  Name of household field in TAZ layer
   MacroOpts.empField    String  Name of employment field in TAZ layer
   MacroOpts.types       Array   e.g. {"Rural", "Suburban", "Urban"}
   MacroOpts.thresholds  Array   Density thresholds (e.g. {0, 211, 950})
   * Types and thresholds must both be sorted by increasing density.
-  MacroOpts.hwyDBD      File    Highway file name
+  MacroOpts.hwy_dbd      File    Highway file name
 
 Outputs:
 Modifies the TAZ layer by adding two fields with data:
@@ -55,8 +55,8 @@ Density = (Households + Employment ) / Area
 
 Macro "Calculate Area Type" (MacroOpts)
 
-  tazDBD = MacroOpts.tazDBD
-  seBIN = MacroOpts.seBIN
+  taz_dbd = MacroOpts.taz_dbd
+  se_bin = MacroOpts.se_bin
   areaField = MacroOpts.areaField
   hhField = MacroOpts.hhField
   empField = MacroOpts.empField
@@ -64,24 +64,24 @@ Macro "Calculate Area Type" (MacroOpts)
   thresholds = MacroOpts.thresholds
 
   // Open the TAZ layer
-  {tLyr} = GetDBLayers(tazDBD)
-  tLyr = AddLayerToWorkspace(tLyr, tazDBD, tLyr)
+  {tLyr} = GetDBLayers(taz_dbd)
+  tLyr = AddLayerToWorkspace(tLyr, taz_dbd, tLyr)
 
   // Open the SE bin file and add fields
-  seTbl = OpenTable("se", "FFB", {seBIN})
+  se_tbl = OpenTable("se", "FFB", {se_bin})
   a_fields = {
     {"Density", "Real", 10, 3,,,,"Used to calculate initial AT"},
     {"AreaType", "Character", 10,,,,,"Area type of the zone" }
   }
-  RunMacro("TCB Add View Fields", {seTbl, a_fields})
+  RunMacro("TCB Add View Fields", {se_tbl, a_fields})
 
   // Join the se table to the TAZ dbd
-  jv = JoinViews("jv", tLyr + ".TAZ", seTbl + ".ID", )
+  jv = JoinViews("jv", tLyr + ".TAZ", se_tbl + ".ID", )
 
   // Get Column Vectors
   v_area = GetDataVector(jv + "|", tLyr + "." + areaField, )
-  v_hh = GetDataVector(jv + "|", seTbl + "." + hhField, )
-  v_totemp = GetDataVector(jv + "|", seTbl + "." + empField, )
+  v_hh = GetDataVector(jv + "|", se_tbl + "." + hhField, )
+  v_totemp = GetDataVector(jv + "|", se_tbl + "." + empField, )
 
   // Compute density
   v_dens = (v_hh + v_totemp ) / v_area
@@ -94,11 +94,11 @@ Macro "Calculate Area Type" (MacroOpts)
     else v_atype
   end
 
-  SetDataVector(jv + "|", seTbl + "." + "Density", v_dens, )
-  SetDataVector(jv + "|", seTbl + "." + "AreaType", v_atype, )
+  SetDataVector(jv + "|", se_tbl + "." + "Density", v_dens, )
+  SetDataVector(jv + "|", se_tbl + "." + "AreaType", v_atype, )
 
   CloseView(jv)
-  CloseView(seTbl)
+  CloseView(se_tbl)
   DropLayerFromWorkspace(tLyr)
 
 EndMacro
@@ -109,24 +109,24 @@ Uses buffers to smooth the boundaries between the different area types.
 
 Macro "Smooth Area Type" (MacroOpts)
 
-  tazDBD = MacroOpts.tazDBD
-  seBIN = MacroOpts.seBIN
+  taz_dbd = MacroOpts.taz_dbd
+  se_bin = MacroOpts.se_bin
   types = MacroOpts.types
 
   // Create map of TAZs we se data joined
-  map = RunMacro("G30 new map", tazDBD)
-  {tLyr} = GetDBLayers(tazDBD)
+  map = RunMacro("G30 new map", taz_dbd)
+  {tLyr} = GetDBLayers(taz_dbd)
 
   // Join the se table to the TAZ layer
   // Add a "ATSmoothed" field to track which TAZs have been smoothed
   // to avoid smoothing them more than once.
-  seTbl = OpenTable("se", "FFB", {seBIN})
+  se_tbl = OpenTable("se", "FFB", {se_bin})
   a_fields = {
     {"ATSmoothed", "Integer", 10,,,,,
     "Whether or not the area type was smoothed"}
   }
-  RunMacro("TCB Add View Fields", {seTbl, a_fields})
-  jv = JoinViews("jv", tLyr + ".TAZ", seTbl + ".ID", )
+  RunMacro("TCB Add View Fields", {se_tbl, a_fields})
+  jv = JoinViews("jv", tLyr + ".TAZ", se_tbl + ".ID", )
 
 
   // Loop over the area types in reverse order (e.g. Urban to Rural)
@@ -142,7 +142,7 @@ Macro "Smooth Area Type" (MacroOpts)
     if n > 0 then do
       // Create a temporary 1-mile buffer (deleted at end of macro)
       // and add to map.
-      a_path = SplitPath(tazDBD)
+      a_path = SplitPath(taz_dbd)
       bufferDBD = a_path[1] + a_path[2] + "ATbuffer.dbd"
       CreateBuffers(bufferDBD, "buffer", {"selection"}, "Value", {1},)
       bLyr = AddLayer(map,"buffer",bufferDBD,"buffer")
@@ -164,10 +164,10 @@ Macro "Smooth Area Type" (MacroOpts)
         opts.Constant = 1
         v_smoothed = Vector(n2, "Long", opts)
         SetDataVector(
-          jv + "|in_buffer", seTbl + "." + "AreaType", v_atype,
+          jv + "|in_buffer", se_tbl + "." + "AreaType", v_atype,
         )
         SetDataVector(
-          jv + "|in_buffer", seTbl + "." + "ATSmoothed", v_smoothed,
+          jv + "|in_buffer", se_tbl + "." + "ATSmoothed", v_smoothed,
         )
       end
 
@@ -177,7 +177,7 @@ Macro "Smooth Area Type" (MacroOpts)
   end
 
   CloseView(jv)
-  CloseView(seTbl)
+  CloseView(se_tbl)
   CloseMap(map)
 EndMacro
 
@@ -187,25 +187,25 @@ Tags highway links with the area type of the TAZ they are nearest to.
 
 Macro "Tag Highway with Area Type" (MacroOpts)
 
-  tazDBD = MacroOpts.tazDBD
-  seBIN = MacroOpts.seBIN
-  hwyDBD = MacroOpts.hwyDBD
+  taz_dbd = MacroOpts.taz_dbd
+  se_bin = MacroOpts.se_bin
+  hwy_dbd = MacroOpts.hwy_dbd
   types = MacroOpts.types
 
   // Create map of TAZs and join se data
-  map = RunMacro("G30 new map", tazDBD)
-  {tLyr} = GetDBLayers(tazDBD)
-  seTbl = OpenTable("se", "FFB", {seBIN})
-  jv = JoinViews("jv", tLyr + ".TAZ", seTbl + ".ID", )
+  map = RunMacro("G30 new map", taz_dbd)
+  {tLyr} = GetDBLayers(taz_dbd)
+  se_tbl = OpenTable("se", "FFB", {se_bin})
+  jv = JoinViews("jv", tLyr + ".TAZ", se_tbl + ".ID", )
 
   // Add highway links to map
-  hwyDBD = hwyDBD
-  {nLayer, lLyr} = GetDBLayers(hwyDBD)
-  lLyr = AddLayer(map, lLyr, hwyDBD, lLyr)
+  hwy_dbd = hwy_dbd
+  {nLayer, llyr} = GetDBLayers(hwy_dbd)
+  llyr = AddLayer(map, llyr, hwy_dbd, llyr)
 
   // Add the AreaType field to the network
   a_fields = {{"AreaType", "Character", 10, }}
-  ret = RunMacro("TCB Add View Fields", {lLyr, a_fields})
+  ret = RunMacro("TCB Add View Fields", {llyr, a_fields})
   // Loop over each area type starting with most dense.  Skip the first.
   // All remaining links after this loop will be tagged with the lowest
   // area type.
@@ -227,7 +227,7 @@ Macro "Tag Highway with Area Type" (MacroOpts)
       bLyr = AddLayer(map, "buffer", buffer_dbd, "buffer")
 
       // Select links within the buffer that haven't been updated already
-      SetLayer(lLyr)
+      SetLayer(llyr)
       n2 = SelectByVicinity(
         "links", "several", tLyr + "|selection", 0, )
       query = "Select * where AreaType <> null"
@@ -239,19 +239,19 @@ Macro "Tag Highway with Area Type" (MacroOpts)
       if n2 > 0 then do
         // For these links, update their area type and mark them as updated
         v_at = Vector(n2, "String", {{"Constant", type}})
-        SetDataVector(lLyr + "|links", "AreaType", v_at, )
+        SetDataVector(llyr + "|links", "AreaType", v_at, )
       end
     end
   end
 
   // Select all remaining links and assign them to the
   // first (lowest density) area type.
-  SetLayer(lLyr)
+  SetLayer(llyr)
   query = "Select * where AreaType = null"
   n = SelectByQuery("links", "Several", query)
   if n > 0 then do
       v_at = Vector(n, "String", {{"Constant", types[1]}})
-      SetDataVector(lLyr + "|links", "AreaType", v_at, )
+      SetDataVector(llyr + "|links", "AreaType", v_at, )
   end
 
   CloseMap(map)
