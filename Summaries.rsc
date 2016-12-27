@@ -37,6 +37,9 @@ Inputs
       Name of the field containing the model volume. Can be a daily or period
       count field, but time period between count and volume fields should
       match.
+
+Depends
+  gplyr
 */
 
 Macro "Count Difference Map" (macro_opts)
