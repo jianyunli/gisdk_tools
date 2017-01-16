@@ -428,7 +428,9 @@ Class "df" (tbl)
   */
 
   Macro "read_bin" (file, fields) do
-    // Check extension
+    // Check file and extension
+    if GetFileInfo(file) = null
+      then Throw("read_bin: file does not exist")
     ext = ParseString(file, ".")
     ext = ext[2]
     if ext <> "bin" then Throw("read_bin: file not a .bin")
@@ -440,7 +442,9 @@ Class "df" (tbl)
     CloseView(opts.view)
   EndItem
   Macro "read_csv" (file, fields) do
-    // Check extension
+    // Check file and extension
+    if GetFileInfo(file) = null
+      then Throw("read_csv: file does not exist")
     a_parts = ParseString(file, ".")
     ext = a_parts[2]
     if ext <> "csv" then Throw("read_csv: file not a .csv")
