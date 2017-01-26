@@ -16,6 +16,10 @@ Inputs
     Contains all the arguments needed for the macro. For example:
     hwy_dbd = MacroOpts.hwy_dbd
 
+    period
+      String
+      Name of period. Is used as a suffix for output file names.
+
     hwy_dbd
       String
       Full path to the highway DBD
@@ -72,6 +76,7 @@ Inputs
 
 Macro "OUE Assignment" (MacroOpts)
 
+  period = MacroOpts.period
   hwy_dbd = MacroOpts.hwy_dbd
   cycle = MacroOpts.cycle
   asn_dir = MacroOpts.asn_dir
