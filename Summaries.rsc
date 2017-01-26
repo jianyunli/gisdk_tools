@@ -50,6 +50,9 @@ Macro "Count Difference Map" (macro_opts)
   count_field = macro_opts.count_field
   vol_field = macro_opts.vol_field
 
+  // Create output directory if it doesn't exist
+  if GetDirectoryInfo(output_dir, "All") = null then CreateDirectory(output_dir)
+
   // Create map
   map = RunMacro("G30 new map", hwy_dbd)
   {nlyr, vw} = GetDBLayers(hwy_dbd)
