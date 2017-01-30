@@ -133,7 +133,7 @@ Macro "OUE Assignment" (MacroOpts)
   // Warm start options
   if cycle > 1 then do
     opts.Flag.[Do Warm Start] = 1
-    prev_dir = asnDir + "/cycle_" + String(cycle - 1)
+    prev_dir = asn_dir + "/cycle_" + String(cycle - 1)
     opts.Input.[Path File] = prev_dir + "/path_" + period + ".obt"
   end
 
