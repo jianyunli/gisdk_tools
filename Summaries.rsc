@@ -205,7 +205,7 @@ Macro "Count Difference Map" (macro_opts)
       {0, 1, 0, 1, 1, 4, 0},
       {1, 1, 1},
       {"Arial|Bold|16", "Arial|9", "Arial|Bold|16", "Arial|12"},
-      {"", period + " Period"}
+      {"", vol_field + " vs " + count_field}
     }
   )
   str1 = "XXXXXXXX"
