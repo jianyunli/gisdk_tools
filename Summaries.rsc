@@ -50,6 +50,9 @@ Macro "Count Difference Map" (macro_opts)
   count_field = macro_opts.count_field
   vol_field = macro_opts.vol_field
 
+  // Create output directory if it doesn't exist
+  if GetDirectoryInfo(output_dir, "All") = null then CreateDirectory(output_dir)
+
   // Create map
   map = RunMacro("G30 new map", hwy_dbd)
   {nlyr, vw} = GetDBLayers(hwy_dbd)
@@ -202,7 +205,7 @@ Macro "Count Difference Map" (macro_opts)
       {0, 1, 0, 1, 1, 4, 0},
       {1, 1, 1},
       {"Arial|Bold|16", "Arial|9", "Arial|Bold|16", "Arial|12"},
-      {"", period + " Period"}
+      {"", vol_field + " vs " + count_field}
     }
   )
   str1 = "XXXXXXXX"
