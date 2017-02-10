@@ -213,7 +213,7 @@ Class "df" (tbl)
     if TypeOf(current_name) <> "string" then do
       if TypeOf(current_name[1]) <> "string"
         then Throw("rename: Field name arrays must contain strings")
-      if current_name.lenth <> new_name.length
+      if ArrayLength(current_name) <> ArrayLength(new_name)
         then Throw("rename: Field name arrays must be same length")
     end
 
