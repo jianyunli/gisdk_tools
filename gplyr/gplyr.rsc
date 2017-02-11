@@ -374,56 +374,6 @@ Class "df" (tbl)
   EndItem
 
   /*
-  This macro takes data from a data frame and puts it into a view.  Columns
-  are created if necessary.
-
-  MacroOpts
-    view
-      String
-      TC view name
-    set
-      Optional string
-      set name
-    fields
-      Optional string or array/vector of strings
-      Array/Vector of columns to read. If null, all df columns are written.
-  */
-
-  Macro "fill_view" (MacroOpts) do
-
-    view = MacroOpts.view
-    set = MacroOpts.set
-    fields = MacroOpts.fields
-
-    // Check for required arguments and
-    // that data frame is currently empty
-    if self.is_empty() then Throw("fill_view: data frame is empty")
-    if view = null
-      then Throw("fill_view: Required argument 'view' missing.")
-    if fields <> null then do
-      if TypeOf(fields) = "string" then fields = {fields}
-      if TypeOf(fields) = "vector" then fields = V2A(fields)
-      if TypeOf(fields) <> "array"
-        then Throw("fill_view: 'fields' must be string, vector, or array")
-    end else do
-      fields = self.colnames()
-    end
-
-    for f = 1 to fields.length do
-      field = fields[f]
-
-      if self.tbl.(field).type = "integer" then type = "Integer"
-      else if self.tbl.(field).type = "string" then type = "Character"
-      else type = "Real"
-
-      a_fields =  {{field, type, 8, 2,,,, ""}}
-      RunMacro("TCB Add View Fields", {vw, a_fields})
-
-      SetDataVector(view + "|" + set, field, self.tbl.(field), )
-    end
-  EndItem
-
-  /*
   Simple wrappers to read_view that read bin and csv directly
   */
 
@@ -441,6 +391,7 @@ Class "df" (tbl)
     self.read_view(opts)
     CloseView(opts.view)
   EndItem
+
   Macro "read_csv" (file, fields) do
     // Check file and extension
     if GetFileInfo(file) = null
@@ -459,7 +410,81 @@ Class "df" (tbl)
     DeleteFile(Substitute(file, ".csv", ".DCC", ))
   EndItem
 
-    /*
+  /*
+  This macro takes data from a data frame and puts it into a view.  Columns are
+  created if necessary. All column in the dataframe are written to the view. To
+  save time, use a df.select() before calling update_view() to choose only the
+  columns that need updating.
+
+  view
+    String
+    TC view name
+  set
+    Optional string
+    set name
+  */
+
+  Macro "update_view" (view, set) do
+
+    // Check for required arguments and
+    // that data frame is not currently empty
+    if self.is_empty() then Throw("update_view: data frame is empty")
+    if view = null
+      then Throw("update_view: Required argument 'view' missing.")
+
+    fields = self.colnames()
+    for f = 1 to fields.length do
+      field = fields[f]
+
+      if self.tbl.(field).type = "integer" then type = "Integer"
+      else if self.tbl.(field).type = "string" then type = "Character"
+      else type = "Real"
+
+      a_fields =  {{field, type, 8, 2,,,, ""}}
+      RunMacro("TCB Add View Fields", {view, a_fields})
+
+      SetDataVector(view + "|" + set, field, self.tbl.(field), )
+    end
+  EndItem
+
+  /*
+  Simple wrappers to update_view() that allow you to update
+  CSVs and BIN files without having to open them first.
+  Does not support selection sets. If working on a selection set,
+  the view is already open - see update_view().
+  */
+  Macro "update_csv" (csv_file) do
+
+    // Check file and extension
+    if GetFileInfo(csv_file) = null
+      then Throw("update_csv: file does not exist")
+    a_parts = ParseString(csv_file, ".")
+    ext = a_parts[2]
+    if ext <> "csv" then Throw("update_csv: file not a .csv")
+
+    // Open the file and update it
+    view = OpenTable("view", "CSV", {csv_file})
+    self.update_view(view)
+    CloseView(view)
+    DeleteFile(Substitute(csv_file, ".csv", ".DCC", ))
+  EndItem
+
+  Macro "update_bin" (bin_file) do
+
+    // Check file and extension
+    if GetFileInfo(bin_file) = null
+      then Throw("update_bin: file does not exist")
+    a_parts = ParseString(bin_file, ".")
+    ext = a_parts[2]
+    if ext <> "bin" then Throw("update_bin: file not a .bin")
+
+    // Open the file and update it
+    view = OpenTable("view", "FFB", {bin_file})
+    self.update_view(view)
+    CloseView(view)
+  EndItem
+
+  /*
   Reads a matrix file.
 
   file

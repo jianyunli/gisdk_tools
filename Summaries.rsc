@@ -111,9 +111,7 @@ Macro "Count Difference Map" (macro_opts)
   df.mutate("ExceedMDD", v_exceedMDD)
 
   // Fill data view
-  opts = null
-  opts.view = vw
-  df.fill_view(opts)
+  df.update_view(vw)
 
   // Scaled Symbol Theme
   SetLayer(vw)
@@ -216,4 +214,102 @@ Macro "Count Difference Map" (macro_opts)
   RedrawMap(map)
   RestoreWindow(GetWindowName())
   SaveMap(map, output_dir + "/Count Difference Map.map")
+EndMacro
+
+/*
+Simplifies the creation of chart themes
+
+macro_opts
+  Named array
+
+  layer (required)
+    String
+    Layer name
+
+  field_specs (required)
+    Array of strings
+    Field specs to include in chart (viewname.fieldname)
+
+  type (required)
+    "Pie", "Bar", or "Stack"
+
+  ... (optional)
+    Other arguments passed to CreateChartTheme() for customization
+    See TC help for those option names. Defaults are assumed unless provided.
+    e.g. include `[Minimum Size] = 5` to change the minimum size option.
+*/
+
+Macro "Create Chart Theme" (macro_opts)
+
+  // Check that all required options are present
+  layer = macro_opts.layer
+  field_specs = macro_opts.field_specs
+  type = macro_opts.type
+  if layer = null
+    then Throw("Missing 'layer' variable")
+    else do
+      layers = GetLayerNames()
+      if ArrayPosition(layers, {layer}, ) = null
+        then Throw("Layer '" + layer + "' not found'")
+    end
+  if field_specs = null
+    then Throw("Missing 'field_specs' variable")
+  if type = null
+    then Throw("Missing 'type' variable")
+
+  // Create default options
+  def_opts = null
+  def_opts.Title = layer + " " + type + " Theme"
+  def_opts.[Data Source] = "All"
+  def_opts.[Minimum Value] = null
+  def_opts.[Maximum Value] = null
+  def_opts.[Minimum Size] = 5
+  def_opts.[Maximum Size] = 30
+  def_opts.[Width] = 14
+  def_opts.[3D] = "False"
+  def_opts.[Direction] = "Vertical"
+
+  // Create final options
+  opts = null
+  for o = 1 to def_opts.length do
+    name = def_opts[o][1]
+
+    if macro_opts.(name) <> null
+      then opts.(name) = macro_opts.(name)
+      else opts.(name) = def_opts.(name)
+  end
+
+  // Determine a unique theme name
+  existing_names = GetThemes()
+  theme_name = "Theme1" // if no existing themes
+  for n = 1 to existing_names.length do
+    test_name = "Theme" + String(n)
+    if ArrayPosition(theme_names, {test_name}, ) = null
+      then do
+        theme_name = test_name
+        n = existing_names.length + 1
+      end
+  end
+
+  // Create Theme
+  theme = CreateChartTheme(theme_name, field_specs, type, opts)
+
+  // Set Theme Styles
+  red = ColorRGB(55255, 6425, 7196)
+  green = ColorRGB(19789, 44204, 9766)
+  opts = null
+  opts.method = "HSV"
+  opts.spiral = "LONG"
+  palette = GeneratePalette(red, green, field_specs.length - 2, opts)
+  SetThemeFillColors(theme, palette)
+  str1 = "XXXXXXXX"
+  solid = FillStyle({str1, str1, str1, str1, str1, str1, str1, str1})
+  SetThemeFillStyles(theme, {solid})
+  solid = LineStyle({{{1, -1, 0}}})
+  SetThemeLineStyles(theme, {solid})
+  SetThemeLineColors(theme, {ColorRGB(10000, 10000, 10000)})
+
+  // Show theme
+  ShowTheme(, theme)
+  RedrawMap(GetMap())
 EndMacro
