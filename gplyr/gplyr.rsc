@@ -628,13 +628,14 @@ Class "df" (tbl)
   the columns listed in "fields".
 
   fields:
-    String or array of strings
+    String or array/vector of strings
     fields to keep in the data frame
   */
 
   Macro "select" (fields) do
 
     // Argument checking and type handling
+    if TypeOf(fields) = "vector" then fields = V2A(fields)
     if fields = null then Throw("select: no fields provided")
     if TypeOf(fields) = "string" then fields = {fields}
 
@@ -642,6 +643,9 @@ Class "df" (tbl)
     for f = 1 to fields.length do
       field = fields[f]
 
+      // Check to see if name is in table
+      if !(self.in(field, self.colnames()))
+        then Throw("select: field '" + field + "' not in data frame")
       data.(field) = self.tbl.(self.check_name(field))
     end
     self.tbl = data
