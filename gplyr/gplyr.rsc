@@ -30,7 +30,9 @@ Class "df" (tbl)
   */
 
   Macro "is_empty" do
-    if self.tbl = null then return("true") else return("false")
+    if self.tbl = null then return("true")
+    if self.tbl.length = 1 and self.tbl[1] = null then return("true")
+    return("false")
   EndItem
 
   /*
