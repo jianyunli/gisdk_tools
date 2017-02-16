@@ -701,6 +701,14 @@ Class "df" (tbl)
   EndItem
 
   /*
+  Removes any grouping attributes from the data frame
+  */
+
+  Macro "ungroup" do
+    self.groups = null
+  EndItem
+
+  /*
   This macro works with group_by() similar to dlpyr in R.
   Summary stats are calculated for the columns specified, grouped by
   the columns listed as grouping columns in the df.groups property.
