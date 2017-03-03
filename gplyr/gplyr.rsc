@@ -1337,11 +1337,50 @@ Class "df" (tbl)
     self.mutate("bin", v_label)
   EndItem
 
+  /*
+  Takes an array or vector and returns a list of unique values
+  in the same format.
+
+  Inputs
+    list
+      Vector or array of values
+
+    drop_missing
+      Optional true/false
+      Whether or not to drop missing (null/na) values from the vector
+      Defaults to "true"
+
+  Returns
+    list of unique values (in ascending order)
+    Type matches the input type (vector or array)
+  */
+
+  Macro "unique" (list, drop_missing) do
+
+    // Argument check
+    if TypeOf(list) = null then Throw("unique: 'list' not provided")
+    if not(self.in(TypeOf(list), {"vector", "array"}))
+      then Throw("unique: 'list' isn't a vector or array")
+    if drop_missing = null then drop_missing = "true"
+
+    opts = null
+    opts.Unique = "true"
+    opts.[Omit Missing] = drop_missing
+    if TypeOf(list) = "vector" then do
+      ret = SortVector(list, opts)
+    end else do
+      ret = SortArray(list, opts)
+    end
+
+    return(ret)
+  EndItem
+
 endClass
 
 
+
 /*
-Test macro
+Unit test macro
 Runs through all the methods and writes out results
 */
 Macro "test"
@@ -1411,6 +1450,19 @@ Macro "test"
   df.read_bin(bin_file)
   for a = 1 to answer.length do
     if df.tbl.Count[a] <> answer[a] then Throw("test: read_bin failed")
+  end
+
+  // test unique
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  test = df.unique(df.tbl.Size)
+  answer = {"Large", "Medium", "Small"}
+  for a = 1 to answer.length do
+    if test[a] <> answer[a] then Throw("test: unique failed")
+  end
+  test = df.unique(v2a(df.tbl.Size))
+  for a = 1 to answer.length do
+    if test[a] <> answer[a] then Throw("test: unique failed")
   end
 
   // test write_csv
