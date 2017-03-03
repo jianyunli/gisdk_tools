@@ -1343,7 +1343,9 @@ Class "df" (tbl)
 
   Inputs
     list
-      Vector or array of values
+      String or a vector/array of values
+      If a string, it is assumed to be a column name in the data frame.
+      Otherwise, the vector/array input will be processed.
 
     drop_missing
       Optional true/false
@@ -1359,8 +1361,9 @@ Class "df" (tbl)
 
     // Argument check
     if TypeOf(list) = null then Throw("unique: 'list' not provided")
+    if TypeOf(list) = "string" then list = self.tbl.(list)
     if not(self.in(TypeOf(list), {"vector", "array"}))
-      then Throw("unique: 'list' isn't a vector or array")
+      then Throw("unique: 'list' isn't a string, vector or array")
     if drop_missing = null then drop_missing = "true"
 
     opts = null
@@ -1461,6 +1464,10 @@ Macro "test"
     if test[a] <> answer[a] then Throw("test: unique failed")
   end
   test = df.unique(v2a(df.tbl.Size))
+  for a = 1 to answer.length do
+    if test[a] <> answer[a] then Throw("test: unique failed")
+  end
+  test = df.unique("Size")
   for a = 1 to answer.length do
     if test[a] <> answer[a] then Throw("test: unique failed")
   end
