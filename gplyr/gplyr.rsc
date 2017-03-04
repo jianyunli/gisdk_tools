@@ -1360,8 +1360,14 @@ Class "df" (tbl)
   Macro "unique" (list, drop_missing) do
 
     // Argument check
-    if TypeOf(list) = null then Throw("unique: 'list' not provided")
-    if TypeOf(list) = "string" then list = self.tbl.(list)
+    if TypeOf(list) = "null" then Throw("unique: 'list' not provided")
+    // if a string is passed, attempt to find a column with that name
+    if TypeOf(list) = "string" then do
+      col = self.tbl.(list)
+      if col.length = null
+        then Throw("unique: column '" + list + "' not in table")
+        else list = col
+    end
     if not(self.in(TypeOf(list), {"vector", "array"}))
       then Throw("unique: 'list' isn't a string, vector or array")
     if drop_missing = null then drop_missing = "true"
