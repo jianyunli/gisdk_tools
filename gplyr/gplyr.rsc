@@ -1086,7 +1086,7 @@ Class "df" (tbl)
       unite = "True"
       join_col = "unite"
       a_unite_cols = first_col.colnames()
-      first_col.unite(a_unite_cols, join_col)
+      first_col.unite(a_unite_cols, join_col, "%^&")
       first_col.select(join_col)
     end else do
       join_col = first_col.colnames()
@@ -1100,7 +1100,7 @@ Class "df" (tbl)
     // Create a second working table.
     split = self.copy()
     // If necessary, combine columns in `split` to match `first_col` table
-    if unite then split.unite(a_unite_cols, join_col)
+    if unite then split.unite(a_unite_cols, join_col, "%^&")
     opts = null
     opts.Unique = "True"
     a_unique_keys = SortVector(split.tbl.(key), opts)
@@ -1131,7 +1131,7 @@ Class "df" (tbl)
     // Create final table
     self.tbl = null
     self.tbl.(join_col) = first_col.tbl.(join_col)
-    if unite then self.separate(join_col, a_unite_cols)
+    if unite then self.separate(join_col, a_unite_cols, "%^&")
     first_col.tbl.(join_col) = null
     self.tbl = InsertArrayElements(self.tbl, self.tbl.length + 1, first_col.tbl)
   EndItem
