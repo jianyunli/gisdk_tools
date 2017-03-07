@@ -313,3 +313,89 @@ Macro "Create Chart Theme" (macro_opts)
   ShowTheme(, theme)
   RedrawMap(GetMap())
 EndMacro
+
+/*
+Uses the outviz R package to create an assignment validation report.
+
+Input:
+MacroOpts
+  Named array of arguments
+
+  rscriptexe
+    String
+    Full path to the Rscript.exe file in the R directory
+
+  rmd
+    String
+    Full path to the assignment validation Rmd to use
+
+  pandoc_dir
+    String
+    Full path to the pandoc directory. This is required to knit the Rmd.
+
+  output_dir
+    String
+    Full path to the folder where the knit output will be stored
+
+  hwy_dbd
+    String
+    Full path to the loaded highway network
+
+Depends
+  R (primarily the outviz package)
+*/
+
+Macro "Outviz Assignment Validation" (MacroOpts)
+
+  // Extract arguments
+  rscriptexe = MacroOpts.rscriptexe
+  rmd = MacroOpts.rmd
+  pandoc_dir = MacroOpts.pandoc_dir
+  output_dir = MacroOpts.output_dir
+  hwy_dbd = MacroOpts.hwy_dbd
+
+  // Copy the rmarkdown file into the output folder
+  if GetDirectoryInfo(output_dir, "All") = null then CreateDirectory(output_dir)
+  outputRMD = output_dir + "/Assignment_Validation.Rmd"
+  CopyFile(rmd, outputRMD)
+
+  // Create a csv file of the link table
+  {nLyr, lLyr} = GetDBLayers(hwy_dbd)
+  AddLayerToWorkspace(lLyr, hwy_dbd, lLyr)
+  opts = null
+  opts.[CSV Header] = "True"
+  ExportView(lLyr + "|", "CSV", output_dir + "/links.csv", , opts)
+  DropLayerFromWorkspace(lLyr)
+
+  // Replace \\ with / for the command line calls
+  outputRMD = Substitute(outputRMD, "\\", "/", )
+  rscriptexe = Substitute(rscriptexe, "\\", "/", )
+
+  // Create a batch file to render the RMD
+  batFile = output_dir + "tempbatch.bat"
+  bat = OpenFile(batFile,"w")
+  // Temporarily add the pandoc binaries to the system path
+  pandoc_dir = "C:/projects/NCSAM/Repository/Support_Files/R/bin/pandoc"
+  WriteLine(bat, "set OLDPATH=%PATH%")
+  WriteLine(bat,"set PATH=%PATH%;" + pandoc_dir)
+  // "Rscript -e" allows you to execute R from the command line
+  command = rscriptexe + " -e " + "rmarkdown::render('" + outputRMD + "')"
+  WriteLine(bat,command)
+  // Set the system path back to what it was
+  WriteLine(bat, "set PATH = %OLDPATH%")
+  CloseFile(bat)
+
+  // Run the batch file
+  opts = null
+  opts.Minimize = "True"
+  ret = RunProgram(batFile,opts)
+  if ret <> 0 then do
+      ShowMessage("Assignment validation did not run sucessfully.")
+      ShowMessage(1)
+  end
+Throw()
+  // Delete the temp batch file and link.csv/dcc
+  DeleteFile(batFile)
+  DeleteFile(output_dir + "/links.csv")
+  DeleteFile(output_dir + "/links.DCC")
+EndMacro
