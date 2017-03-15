@@ -760,6 +760,60 @@ Macro "Add Field Description" (table, field, description)
 EndMacro
 
 /*
+Renames a field in a TC view
+
+Inputs
+  view_name
+    String
+    Name of view to modify
+
+  current_name
+    String
+    Name of field to rename
+
+  new_name
+    String
+    New name to use
+*/
+
+Macro "Rename Field" (view_name, current_name, new_name)
+
+  // Argument Check
+  if view_name = null then Throw("Rename Field: 'view_name' not provided")
+  if current_name = null then Throw("Rename Field: 'current_name' not provided")
+  if new_name = null then Throw("Rename Field: 'new_name' not provided")
+
+  // Get and modify the field info array
+  a_str = GetTableStructure(view_name)
+  field_modified = "false"
+  for s = 1 to a_str.length do
+    a_field = a_str[s]
+    field_name = a_field[1]
+
+    // Add original field name to end of field array
+    a_field = a_field + {field_name}
+
+    // rename field if it's the current field
+    if field_name = current_name then do
+      a_field[1] = new_name
+      field_modified = "true"
+    end
+
+    a_str[s] = a_field
+  end
+
+  // Modify the table
+  ModifyTable(view_name, a_str)
+
+  // Throw error if no field was modified
+  if !field_modified
+    then Throw(
+      "Rename Field: Field '" + current_name +
+      "' not found in view '" + view_name + "'"
+    )
+EndMacro
+
+/*
 Tests whether or not a string is a view name or not
 */
 
