@@ -12,9 +12,9 @@ Inputs
   macro_opts
     Named array of macro arguments
 
-    output_dir
+    output_file
       String
-      Path of directory where map will be saved.
+      Complete path of the output map to create.
 
     hwy_dbd
       String
@@ -38,17 +38,38 @@ Inputs
       count field, but time period between count and volume fields should
       match.
 
+    field_suffix
+      Optional string
+      "" by default. If provided, will be appended to the fields created by this
+      macro. For example, if making a count difference map of SUT vs SUT counts,
+      you could provide a suffix of "SUT". This would lead to fields created
+      like "Count_SUT", "Volume_SUT", "diff_SUT", etc. This is used to prevent
+      repeated calls to this macro from overwriting these fields.
+
 Depends
   gplyr
 */
 
 Macro "Count Difference Map" (macro_opts)
 
-  output_dir = macro_opts.output_dir
+  output_file = macro_opts.output_file
   hwy_dbd = macro_opts.hwy_dbd
   count_id_field = macro_opts.count_id_field
   count_field = macro_opts.count_field
   vol_field = macro_opts.vol_field
+  field_suffix = macro_opts.field_suffix
+
+  // set the field suffix
+  if field_suffix = null then field_suffix = ""
+  if field_suffix <> "" then do
+    if field_suffix[1] <> "_" then field_suffix = "_" + field_suffix
+  end
+
+  // Determine output directory (removing trailing backslash)
+  a_path = SplitPath(output_file)
+  output_dir = a_path[1] + a_path[2]
+  len = StringLength(output_dir)
+  output_dir = Left(output_dir, len - 1)
 
   // Create output directory if it doesn't exist
   if GetDirectoryInfo(output_dir, "All") = null then CreateDirectory(output_dir)
@@ -113,9 +134,18 @@ Macro "Count Difference Map" (macro_opts)
   // Fill data view
   df.update_view(vw)
 
+  // Rename fields to add suffix
+  for f = 1 to a_fields.length do
+    cur_field = a_fields[f][1]
+
+    new_field = cur_field + field_suffix
+    RunMacro("Drop Field", vw, new_field)
+    RunMacro("Rename Field", vw, cur_field, new_field)
+  end
+
   // Scaled Symbol Theme
   SetLayer(vw)
-  flds = {vw + ".absdiff"}
+  flds = {vw + ".absdiff" + field_suffix}
   opts = null
   opts.Title = "Absolute Difference"
   opts.[Data Source] = "All"
@@ -139,19 +169,21 @@ Macro "Count Difference Map" (macro_opts)
   ShowTheme(, theme_name)
 
   // Apply the color theme breaks
-  cTheme = CreateTheme("Count % Difference", vw+".pctdiff", "Manual", 8,{
-    {"Values",{
-      {-100, "True", -50, "False"},
-      {-50, "True", -30, "False"},
-      {-30, "True", -10, "False"},
-      {-10, "True", 10, "True"},
-      {10, "False", 30, "True"},
-      {30, "False", 50, "True"},
-      {50, "False", 100, "True"},
-      {100, "False", 10000, "True"}
-      }},
-    {"Other", "False"}
-    })
+  cTheme = CreateTheme(
+    "Count % Difference", vw+".pctdiff" + field_suffix, "Manual", 8,{
+      {"Values",{
+        {-100, "True", -50, "False"},
+        {-50, "True", -30, "False"},
+        {-30, "True", -10, "False"},
+        {-10, "True", 10, "True"},
+        {10, "False", 30, "True"},
+        {30, "False", 50, "True"},
+        {50, "False", 100, "True"},
+        {100, "False", 10000, "True"}
+        }},
+      {"Other", "False"}
+    }
+  )
 
     // Set color theme line styles and colors
     line_colors =	{
@@ -190,7 +222,8 @@ Macro "Count Difference Map" (macro_opts)
   RunMacro("G30 create set", setname)
   SelectByQuery(
     setname, "Several",
-    "Select * where nz(Count) > 0 and ExceedMDD = 0"
+    "Select * where nz(Count" + field_suffix +
+    ") > 0 and ExceedMDD" + field_suffix + " = 0"
   )
   SetLineColor(vw + "|" + setname, ColorRGB(11308, 41634, 24415))
 
@@ -213,7 +246,7 @@ Macro "Count Difference Map" (macro_opts)
   // Save map
   RedrawMap(map)
   RestoreWindow(GetWindowName())
-  SaveMap(map, output_dir + "/Count Difference Map.map")
+  SaveMap(map, output_file)
 EndMacro
 
 /*
