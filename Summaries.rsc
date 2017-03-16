@@ -134,7 +134,7 @@ Macro "Count Difference Map" (macro_opts)
   // Fill data view
   df.update_view(vw)
 
-  // Rename fields to add suffix
+  // Rename fields to add suffix (and remove any that already exist)
   for f = 1 to a_fields.length do
     cur_field = a_fields[f][1]
 
@@ -247,6 +247,7 @@ Macro "Count Difference Map" (macro_opts)
   RedrawMap(map)
   RestoreWindow(GetWindowName())
   SaveMap(map, output_file)
+  CloseMap(map)
 EndMacro
 
 /*
