@@ -462,7 +462,10 @@ Macro "Clear Directory" (dir)
 
   dir = "\"" +  dir + "\""
   cmd = "cmd /C rmdir /s /q " + dir
-  cmd = cmd + " && mkdir " + dir
+  opts.Minimize = "True"
+  RunProgram(cmd, opts)
+  
+  cmd = "cmd /C mkdir " + dir
   opts.Minimize = "True"
   RunProgram(cmd, opts)
 EndMacro
