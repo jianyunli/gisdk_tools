@@ -427,7 +427,7 @@ Macro "Outviz Assignment Validation" (MacroOpts)
       ShowMessage("Assignment validation did not run sucessfully.")
       ShowMessage(1)
   end
-Throw()
+
   // Delete the temp batch file and link.csv/dcc
   DeleteFile(batFile)
   DeleteFile(output_dir + "/links.csv")
