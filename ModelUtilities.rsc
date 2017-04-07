@@ -205,18 +205,27 @@ Macro "Read Parameter File" (parameterFile, incDescr)
           else Value(value)
     end
 
-    // Create the path array
+    // Create the path array. Check if any of the path components are null.
+    null_path = "false"
     for d = 1 to dimensions do
-      a_path = a_path + {a_dVecs[d][i]}
+      partial_path = a_dVecs[d][i]
+      
+      if partial_path = null then null_path = "true"
+      a_path = a_path + {partial_path}
     end
 
-    if !incDescr then
-      Parameters = RunMacro("Insert into Opts Array", Parameters, a_path, value)
-    else do
-      a_path2 = a_path + {"value"}
-      Parameters = RunMacro("Insert into Opts Array", Parameters, a_path2, value)
-      a_path2 = a_path + {"desc"}
-      Parameters = RunMacro("Insert into Opts Array", Parameters, a_path2, desc)
+    // if any of the path components for the current row were null,
+    // skip the row. This allows for extra rows in the description column
+    // that don't have to correspond to any variables.
+    if !null_path then do
+      if !incDescr then
+        Parameters = RunMacro("Insert into Opts Array", Parameters, a_path, value)
+      else do
+        a_path2 = a_path + {"value"}
+        Parameters = RunMacro("Insert into Opts Array", Parameters, a_path2, value)
+        a_path2 = a_path + {"desc"}
+        Parameters = RunMacro("Insert into Opts Array", Parameters, a_path2, desc)
+      end
     end
   end
 
