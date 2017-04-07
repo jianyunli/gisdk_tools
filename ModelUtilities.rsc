@@ -869,15 +869,19 @@ MacroOpts
     ...
 
     Simply have the equiv table look like this:
-
-    from_field  to_field  ...
-    HBS      HBO
+    
+    to_field  from_field  ...
+    HBO       HBS
 
     And loop over time of day passing the suffix into the function for each
     period. e.g.
 
-    RunMacro("Field Crosswalk", tbl, equiv_tbl, "_AM")
-    RunMacro("Field Crosswalk", tbl, equiv_tbl, "_MD")
+    opts.tbl = tbl
+    opts.equiv_tbl = equiv_tbl
+    opts.suffix = "_AM"
+    RunMacro("Field Crosswalk", opts)
+    opts.suffix = "_MD"
+    RunMacro("Field Crosswalk", opts)
     ...
 
     The macro will look for "HBS_AM" in the table and convert to "HBO_AM".
@@ -894,12 +898,18 @@ Macro "Field Crosswalk" (MacroOpts)
   // Open tables
   equiv_tbl = OpenTable("param", "CSV", {equiv_tbl})
   tbl = OpenTable("se", "FFB", {tbl})
+  
+  // Only work with equiv_tbl rows that aren't null
+  SetView(equiv_tbl)
+  qry = "Select * where from_field <> null"
+  n = SelectByQuery("not_null", "several", qry)
+  if n = 0 then Throw("Field Crosswalk: equiv_tbl is empty")
 
   // Get from-field, to-field, factor, and description vectors
-  v_to_field = GetDataVector(equiv_tbl + "|", "to_field", )
-  v_to_desc = GetDataVector(equiv_tbl + "|", "to_desc", )
-  v_from_field = GetDataVector(equiv_tbl + "|", "from_field", )
-  v_from_fac = GetDataVector(equiv_tbl + "|", "from_factor", )
+  v_to_field = GetDataVector(equiv_tbl + "|not_null", "to_field", )
+  v_to_desc = GetDataVector(equiv_tbl + "|not_null", "to_desc", )
+  v_from_field = GetDataVector(equiv_tbl + "|not_null", "from_field", )
+  v_from_fac = GetDataVector(equiv_tbl + "|not_null", "from_factor", )
 
   // Zero out any existing "to" fields to prevent build up
   opts = null
