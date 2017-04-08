@@ -1011,6 +1011,12 @@ Macro "Matrix Crosswalk" (MacroOpts)
     to_core = v_to_core[c]
     from_core = v_from_core[c]
     factor = v_from_fac[c]
+    
+    // Check that the from_core was found.
+    if a_from_curs.(from_core) = null
+      then Throw(
+        "Matrix Crosswalk: from_core '" + from_core + "' not found in matrix"
+      )
 
     // Create the to core if it doesn't already exist and create currency
     a_corenames = GetMatrixCoreNames(to_mtx)
