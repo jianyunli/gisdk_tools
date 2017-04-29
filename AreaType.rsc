@@ -28,21 +28,14 @@ Modifies the Highway layer by adding one field with data:
 
 Macro "Area Type" (MacroOpts)
 
-  // Test Inclusion - this macro uses SelectByVicinity()
-  // If the script changes the user's settings, change it back at end of macro
-  inclusionChanged = "No"
-  if GetSelectInclusion() = "Intersecting" then do
-      SetSelectInclusion("Enclosed")
-      inclusionChanged = "Yes"
-  end
+  // Get the current inclusion setting in order to reset it at end of macro
+  original_inclusion = GetSelectInclusion()
 
   RunMacro("Calculate Area Type", MacroOpts)
   RunMacro("Smooth Area Type", MacroOpts)
   RunMacro("Tag Highway with Area Type", MacroOpts)
 
-  if inclusionChanged = "Yes" then do
-      SetSelectInclusion("Intersecting")
-  end
+  SetSelectInclusion(original_inclusion)
 EndMacro
 
 /*
@@ -112,6 +105,9 @@ Macro "Smooth Area Type" (MacroOpts)
   taz_dbd = MacroOpts.taz_dbd
   se_bin = MacroOpts.se_bin
   types = MacroOpts.types
+  
+  // This smoothing operation uses enclosed inclusion
+  if GetSelectInclusion() = "Intersecting" then SetSelectInclusion("Enclosed")
 
   // Create map of TAZs we se data joined
   map = RunMacro("G30 new map", taz_dbd)
@@ -191,6 +187,10 @@ Macro "Tag Highway with Area Type" (MacroOpts)
   se_bin = MacroOpts.se_bin
   hwy_dbd = MacroOpts.hwy_dbd
   types = MacroOpts.types
+
+  // This smoothing operation uses intersecting inclusion.
+  // This prevents links inbetween urban and surban from remaining rural.
+  if GetSelectInclusion() = "Enclosed" then SetSelectInclusion("Intersecting")
 
   // Create map of TAZs and join se data
   map = RunMacro("G30 new map", taz_dbd)
