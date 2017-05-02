@@ -118,6 +118,7 @@ EndMacro
 
 /*
 This macro assigns ramp facility types to the highest FT they connect to.
+It also creates a new field to mark the links as ramps so that info is not lost.
 
 Input:
 hwy_dbd      String  Full path of the highway geodatabase
@@ -143,8 +144,20 @@ Macro "Assign FT to Ramps" (hwy_dbd, ramp_query, ftField, a_ftOrder)
   if n1 = 0 then do
     Throw("No ramp links found.")
   end else do
+  
+    // Create a new field to identify these links as ramps
+    // after their facility type is changed.
+    a_fields = {
+      {"ramp", "Character", 10, ,,,,"Is this link a ramp?"}
+    }
+    RunMacro("Add Fields", llyr, a_fields)
+    opts = null
+    opts.Constant = "Yes"
+    v = Vector(n1, "String", opts)
+    SetDataVector(llyr + "|ramps", "ramp", v, )
+  
+    // Get ramp ids and loop over each one
     v_rampIDs = GetDataVector(llyr + "|ramps", "ID", )
-
     for r = 1 to v_rampIDs.length do
       rampID = v_rampIDs[r]
 
