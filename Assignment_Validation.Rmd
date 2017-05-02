@@ -1,5 +1,6 @@
 ---
 title: "Assignment Validation"
+date: 'r Sys.Date()'
 author: "WSP | Parsons Brinckerhoff"
 output: html_document
 ---
@@ -20,17 +21,27 @@ library(tcadr)
 ```
 
 
-```{r area_type, include = FALSE}
-# Use these two variables to specify the names of your volume and
-# count fields.  These will be used in the standard plots.
+```{r, include = FALSE}
+# These variables identify the pertinent field names. In gisdk_tools, these 
+# field names are fixed. A future enhancement would be to pass in these field
+# names to the RMD using args <- commandArgs(trailingOnly = TRUE)
 volume_var <- "DailyFlow"
+count_id_var <- "CountID"
 count_var <- "DailyCount"
 
 
 # Read in the links table.  readr or tcadr could be used here.
-links <- readr::read_csv("links.csv") %>%
-  filter(!(is.na(DailyCount)), HCMType != "CC")
+links <- readr::read_csv("links.csv")
   
+# create count/volume fields with standard name
+links$volume <- links[[volume_var]]
+links$count <- links[[count_var]]
+links$count_id <- links[[count_id_var]]
+
+# Remove centroid connectors, ramps, and links with no counts
+links <- links %>%
+  filter(!(is.na(count)), HCMType != "CC", is.na(ramp))
+
 links <- links %>%
   mutate(
     HCMType = factor(
@@ -44,12 +55,17 @@ links <- links %>%
   ) %>%
     rename(
     facility_group = HCMType,
-    area_type = AreaType,
     screenline = Screenline
-  )
+  ) %>%
+  group_by(facility_group, area_name, screenline, count_id) %>%
+  summarize(
+    count = sum(count),
+    volume = sum(volume)
+  ) %>%
+  ungroup()
   
 # make a copy of the volume field for outviz grouping
-links[, "Volume_Group"] <- links[, volume_var]
+links$Volume_Group <- links$volume
 links$Volume_Group <- outviz:::cut_volumes(links$Volume_Group)
 ```
 
@@ -77,56 +93,56 @@ rmse_volume_group <- data_frame(
 ```
 
 ```{r validation}
-plot_validation(links, volume_var, count_var, show_lm = TRUE)
-plot_validation(links, volume_var, count_var, show_lm = TRUE) +
+plot_validation(links, "volume", "count", show_lm = TRUE)
+plot_validation(links, "volume", "count", show_lm = TRUE) +
   facet_wrap(~ area_name, scales = "free")
-plot_validation(links, volume_var, count_var) +
+plot_validation(links, "volume", "count") +
   facet_wrap(~ facility_group)
 ```
 
 ```{r mdd}
-plotly_mdd(links, volume_var, count_var, color_field = "facility_group")
+plotly_mdd(links, "volume", "count", color_field = "facility_group")
 ```
 
 ```{r rmse}
-link_stats_table(links, volume_var, count_var, group_field = "facility_group",
+link_stats_table(links, "volume", "count", group_field = "facility_group",
                  type = "rmse") %>%
   left_join(rmse_facility_group, by = "facility_group") %>%
   kable(digits = 2, caption = "RMSE by Facility Group")
 
-link_stats_table(links, volume_var, count_var, group_field = "area_name",
+link_stats_table(links, "volume", "count", group_field = "area_name",
                  type = "rmse") %>%
   kable(digits = 2, caption = "RMSE by Area Type")
 
-link_stats_table(links, volume_var, count_var, group_field = "Volume_Group",
+link_stats_table(links, "volume", "count", group_field = "Volume_Group",
                  type = "rmse") %>%
   left_join(rmse_volume_group, by = "Volume_Group") %>%
   kable(digits = 2, caption = "RMSE by Volume Group")
 ```
 
 ```{r flow}
-link_stats_table(links, volume_var, count_var, group_field = "facility_group",
+link_stats_table(links, "volume", "count", group_field = "facility_group",
                  type = "flow") %>%
   kable(digits = 2, caption = "Total Flow by Facility Group")
 
-link_stats_table(links, volume_var, count_var, group_field = "Volume_Group",
+link_stats_table(links, "volume", "count", group_field = "Volume_Group",
                  type = "flow") %>%
   left_join(flow_volume_group, by = "Volume_Group") %>%
   kable(digits = 2, caption = "Total Flow by Volume Group")
 
-link_stats_table(links, volume_var, count_var, group_field = "area_name",
+link_stats_table(links, "volume", "count", group_field = "area_name",
                  type = "flow") %>%
   kable(digits = 2, caption = "Total Flow by Area Type")
 
 link_stats_table(links %>% filter(screenline != 0),
-                 volume_var, count_var, group_field = "screenline", type = "flow") %>%
+                 "volume", "count", group_field = "screenline", type = "flow") %>%
   mutate(Target = 10) %>%
-  kable(digits = 2, caption = "Total Flow by Volume Group")
+  kable(digits = 2, caption = "Total Flow by Screenline")
 ```
 
 ```{r link_targets}
-volString <- paste0(volume_var, " > 10000")
-link_targets(links, volume_var, count_var,
+volString <- paste0("volume", " > 10000")
+link_targets(links, "volume", "count",
              "facility_group == 'Freeway'", volString) %>%
   kable(digits = 2, caption = "Individual Link Targets")
 ```
