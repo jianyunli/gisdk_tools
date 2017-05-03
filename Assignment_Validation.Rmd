@@ -22,13 +22,16 @@ library(tcadr)
 
 
 ```{r, include = FALSE}
-# These variables identify the pertinent field names. In gisdk_tools, these 
-# field names are fixed. A future enhancement would be to pass in these field
-# names to the RMD using args <- commandArgs(trailingOnly = TRUE)
+# These variables identify the pertinent field names and any other variables. In
+# gisdk_tools, these field names are fixed. A future enhancement would be to
+# pass in these field names to the RMD using 
+# args <- commandArgs(trailingOnly = TRUE)
 volume_var <- "DailyFlow"
 count_id_var <- "CountID"
 count_var <- "DailyCount"
-
+fac_types <- c("Freeway", "MLHighway", "TLHighway", "PrArterial",
+        "MinArterial", "Collector", "Local", "Total")
+area_types <- c("Urban", "Suburban", "Rural")
 
 # Read in the links table.  readr or tcadr could be used here.
 links <- readr::read_csv("links.csv")
@@ -44,14 +47,8 @@ links <- links %>%
 
 links <- links %>%
   mutate(
-    HCMType = factor(
-      HCMType,
-      labels = unique(links$HCMType)
-    ),
-    area_name = factor(
-      AreaType,
-      labels = unique(links$AreaType)
-    )
+    HCMType = factor(HCMType, levels = fac_types, ordered = TRUE),
+    area_name = factor(AreaType, levels = area_types, ordered = TRUE)
   ) %>%
     rename(
     facility_group = HCMType,
@@ -72,23 +69,64 @@ links$Volume_Group <- outviz:::cut_volumes(links$Volume_Group)
 ```{r targets}
 rmse_facility_group <- data_frame(
   facility_group = c("Freeway", "MLHighway", "TLHighway", "PrArterial",
-        "MinArterial", "Collector", "Total"),
-  Target = c(25, 35, 50, 50, 65, 100, 40)
+        "MinArterial", "Collector", "Local", "Total"),
+  Target = c(25, 35, 50, 50, 65, 100, 100, 40)
 )
 
 flow_volume_group <- data_frame(
   `Volume_Group` = c(
-    "0 - 5000", "5000 - 10000", "10000 - 15000", "15000 - 20000",
-    "20000 - 30000", "> 30000", "Total"),
-  Target = c( 100, 45, 35, 30, 27, 25, 10 )
+    "0 - 5000",
+    "5000 - 10000",
+    "10000 - 15000",
+    "15000 - 20000",
+    "20000 - 30000",
+    "> 30000",
+    "Total",
+    "20000 - 40000",
+    "40000 - 60000",
+    "> 60000"
+  ),
+  Target = c(
+    100,
+    45,
+    35,
+    30,
+    27,
+    25,
+    10,
+    25,
+    20,
+    19
+  )
 )
 
 rmse_volume_group <- data_frame(
   `Volume_Group` = c(
-    "0 - 5000", "5000 - 10000", "10000 - 15000", "15000 - 20000",
-    "20000 - 30000", "30000 - 50000", "50000 - 60000",
-    "> 60000", "Total"),
-  Target = c(100, 45, 35, 30, 27, 25, 20, 19, 40)
+    "0 - 5000",
+    "5000 - 10000",
+    "10000 - 15000",
+    "15000 - 20000",
+    "20000 - 30000",
+    "30000 - 50000",
+    "50000 - 60000",
+    "> 60000",
+    "Total",
+    "20000 - 40000",
+    "40000 - 60000"
+  ),
+  Target = c(
+    100,
+    45,
+    35,
+    30,
+    27,
+    25,
+    20,
+    19,
+    40,
+    25,
+    20
+  )
 )
 ```
 
@@ -105,39 +143,65 @@ plotly_mdd(links, "volume", "count", color_field = "facility_group")
 ```
 
 ```{r rmse}
-link_stats_table(links, "volume", "count", group_field = "facility_group",
-                 type = "rmse") %>%
+link_stats_table(
+  links, "volume", "count", group_field = "facility_group", type = "rmse") %>%
   left_join(rmse_facility_group, by = "facility_group") %>%
-  kable(digits = 2, caption = "RMSE by Facility Group")
+  mutate_at(
+    vars(`Number of Links`), .funs = funs(format(round(., 0), big.mark = ","))
+  ) %>%
+  kable(digits = 2, caption = "RMSE by Facility Group", align = "lrrr")
 
-link_stats_table(links, "volume", "count", group_field = "area_name",
-                 type = "rmse") %>%
-  kable(digits = 2, caption = "RMSE by Area Type")
+link_stats_table(
+  links, "volume", "count", group_field = "area_name",type = "rmse") %>%
+  mutate_at(
+    vars(`Number of Links`), .funs = funs(format(round(., 0), big.mark = ","))
+  ) %>%
+  kable(digits = 2, caption = "RMSE by Area Type", align = "lrr")
 
-link_stats_table(links, "volume", "count", group_field = "Volume_Group",
-                 type = "rmse") %>%
+link_stats_table(
+  links, "volume", "count", group_field = "Volume_Group", type = "rmse") %>%
   left_join(rmse_volume_group, by = "Volume_Group") %>%
-  kable(digits = 2, caption = "RMSE by Volume Group")
+  mutate_at(
+    vars(`Number of Links`), .funs = funs(format(round(., 0), big.mark = ","))
+  ) %>%
+  kable(digits = 2, caption = "RMSE by Volume Group", align = "lrrr")
 ```
 
 ```{r flow}
-link_stats_table(links, "volume", "count", group_field = "facility_group",
-                 type = "flow") %>%
-  kable(digits = 2, caption = "Total Flow by Facility Group")
+link_stats_table(
+  links, "volume", "count", group_field = "facility_group", type = "flow") %>%
+  mutate_at(
+    vars(`Observed Flow`, `Model Flow`),
+    .funs = funs(format(round(., 0), big.mark = ","))
+  ) %>%
+  kable(digits = 2, caption = "Total Flow by Facility Group", align = "lrrr")
 
-link_stats_table(links, "volume", "count", group_field = "Volume_Group",
-                 type = "flow") %>%
+link_stats_table(
+  links, "volume", "count", group_field = "Volume_Group", type = "flow") %>%
   left_join(flow_volume_group, by = "Volume_Group") %>%
-  kable(digits = 2, caption = "Total Flow by Volume Group")
+  mutate_at(
+    vars(`Observed Flow`, `Model Flow`),
+    .funs = funs(format(round(., 0), big.mark = ","))
+  ) %>%
+  kable(digits = 2, caption = "Total Flow by Volume Group", align = "lrrrr")
 
-link_stats_table(links, "volume", "count", group_field = "area_name",
-                 type = "flow") %>%
-  kable(digits = 2, caption = "Total Flow by Area Type")
+link_stats_table(
+  links, "volume", "count", group_field = "area_name", type = "flow") %>%
+  mutate_at(
+    vars(`Observed Flow`, `Model Flow`),
+    .funs = funs(format(round(., 0), big.mark = ","))
+  ) %>%  
+  kable(digits = 2, caption = "Total Flow by Area Type", align = "lrrr")
 
-link_stats_table(links %>% filter(screenline != 0),
-                 "volume", "count", group_field = "screenline", type = "flow") %>%
+link_stats_table(
+  links %>% filter(screenline != 0),
+  "volume", "count", group_field = "screenline", type = "flow") %>%
+  mutate_at(
+    vars(`Observed Flow`, `Model Flow`),
+    .funs = funs(format(round(., 0), big.mark = ","))
+  ) %>%
   mutate(Target = 10) %>%
-  kable(digits = 2, caption = "Total Flow by Screenline")
+  kable(digits = 2, caption = "Total Flow by Screenline", align = "lrrrr")
 ```
 
 ```{r link_targets}
