@@ -54,8 +54,10 @@ links <- links %>%
     facility_group = HCMType,
     screenline = Screenline
   ) %>%
-  group_by(facility_group, area_name, screenline, count_id) %>%
+  group_by(facility_group, screenline, count_id) %>%
   summarize(
+    # Some 1-way pair links can have different area types
+    area_name = first(area_name),
     count = sum(count),
     volume = sum(volume)
   ) %>%
@@ -131,7 +133,7 @@ rmse_volume_group <- data_frame(
 ```
 
 ```{r validation}
-plot_validation(links, "volume", "count", show_lm = TRUE)
+plotly_validation(links, "volume", "count", "facility_group", id = "count_id")
 plot_validation(links, "volume", "count", show_lm = TRUE) +
   facet_wrap(~ area_name, scales = "free")
 plot_validation(links, "volume", "count") +
@@ -139,7 +141,7 @@ plot_validation(links, "volume", "count") +
 ```
 
 ```{r mdd}
-plotly_mdd(links, "volume", "count", color_field = "facility_group")
+plotly_mdd(links, "volume", "count", color_field = "facility_group", id = "count_id")
 ```
 
 ```{r rmse}
