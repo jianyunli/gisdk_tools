@@ -702,9 +702,15 @@ a_fields
   Each sub-array contains the 12-elements that describe a field.
   e.g. {"Density", "Real", 10, 3,,,,"Used to calculate initial AT"}
   (See ModifyTable() TC help page for full array info)
+  
+a_initial_values
+  Array (optional)
+  If provided, the field will be set to this value. This can be used to ensure
+  that a field starts at null. If left blank, and the field is already present,
+  then the previous values remain.
 */
 
-Macro "Add Fields" (view, a_fields)
+Macro "Add Fields" (view, a_fields, a_initial_values)
 
   // Get current structure and preserve current fields by adding
   // current name to 12th array position
@@ -733,7 +739,19 @@ Macro "Add Fields" (view, a_fields)
   end
 
   ModifyTable(view, a_str)
-
+  
+  // Set initial field values if provided
+  if a_initial_values <> null then do
+    length = GetRecordCount(view, )
+    for f = 1 to a_initial_values.length do
+      field = a_fields[f][1]
+      init_value = a_initial_values[f]
+      
+      opts = null
+      opts.Constant = init_value
+      v = Vector(length, TypeOf(init_value))
+    end
+  end
 EndMacro
 
 /*
