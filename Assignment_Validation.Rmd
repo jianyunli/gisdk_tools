@@ -61,8 +61,8 @@ links <- links %>%
   ) %>%
   ungroup()
   
-# make a copy of the volume field for outviz grouping
-links$Volume_Group <- links$volume
+# make a copy of the count field for outviz grouping
+links$Volume_Group <- links$count
 links$Volume_Group <- outviz:::cut_volumes(links$Volume_Group)
 ```
 
