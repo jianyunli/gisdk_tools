@@ -26,7 +26,7 @@ library(tcadr)
 # gisdk_tools, these field names are fixed. A future enhancement would be to
 # pass in these field names to the RMD using 
 # args <- commandArgs(trailingOnly = TRUE)
-volume_var <- "DailyFlow"
+volume_var <- "Flow_Daily"
 count_id_var <- "CountID"
 count_var <- "DailyCount"
 fac_types <- c("Freeway", "MLHighway", "TLHighway", "PrArterial",
