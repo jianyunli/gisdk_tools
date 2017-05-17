@@ -433,3 +433,74 @@ Macro "Outviz Assignment Validation" (MacroOpts)
   DeleteFile(output_dir + "/links.csv")
   DeleteFile(output_dir + "/links.DCC")
 EndMacro
+
+/*
+This macro summarizes link-level fields into scenario-level statistics.
+Summaries include VMT, VHT, space mean speed, and delay.
+
+MacroOpts
+  Named array holding all arguments (e.g. MacroOpts.hwy_dbd)
+  
+  hwy_dbd
+    String
+    Full path of the line geographic file of highway links. This should be the
+    "loaded" network, such that the assignment results are included.
+  
+  output_dir
+    String
+    Full path of output directory where the final csv will be written
+
+  at_field
+    String
+    Field name containing area type information
+    Defaults to "AreaType"
+    
+  ft_field
+    String
+    Field name containing facility type information
+    Defaults to "HCMType"
+
+  summary_fields
+    Named array
+    Describes the names of the fields to sum up for each metric
+    Defaults to {"Flow_Daily", "VMT_Daily", "VHT_Daily", "Delay_Daily"}
+*/
+
+Macro "Link Summary by FT and AT" (MacroOpts)
+
+  // Extract arguments from named array
+  hwy_dbd = MacroOpts.hwy_dbd
+  output_dir = MacroOpts.output_dir
+  at_field = MacroOpts.at_field
+  ft_field = MacroOpts.ft_field
+  summary_fields = MacroOpts.summary_fields
+  
+  // Default values
+  if at_field = null then at_field = "AreaType"
+  if ft_field = null then ft_field = "HCMType"
+  if summary_fields = null then do
+    summary_fields = {"Flow_Daily", "VMT_Daily", "VHT_Daily", "Delay_Daily"}
+  end
+  
+  // Argument checks
+  if hwy_dbd = null then Throw("'hwy_dbd' not provided")
+  if output_dir = null then Throw("'output_dir' not provided")
+  
+  // Open the highway link layer and read into a data frame
+  {nlyr, llyr} = GetDBLayers(hwy_dbd)
+  AddLayerToWorkspace(llyr, hwy_dbd, llyr)
+  hwy_df = CreateObject("df")
+  opts = null
+  opts.view = llyr
+  opts.fields = {ft_field, at_field} + summary_fields
+  hwy_df.read_view(opts)
+  
+  // Summarize by ft and at
+  hwy_df.group_by({ft_field, at_field})
+  agg = null
+  for f = 1 to summary_fields.length do
+    agg.(summary_fields[f]) = {"sum"}
+  end
+  hwy_df.summarize(agg)
+  hwy_df.write_csv(output_dir + "/link_summary_by_FT_and_AT.csv")
+EndMacro
