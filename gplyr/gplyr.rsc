@@ -730,7 +730,9 @@ Class "df" (tbl)
     e.g. agg.weight = {"sum", "avg"}
     This will sum and average the weight field
     The possible aggregations are:
-      first, sum, high, low, avg, stddev
+      first, sum, high, low, avg, stddev, count
+    The "count" option is a little different. If it is included in any of the
+    fields, a field named "Count" will be included in the resulting table.
 
   Returns
   A new data frame of the summarized input table object.
@@ -817,6 +819,15 @@ Class "df" (tbl)
         self.rename(current_field, new_field)
       end
     end
+    
+    // Check if "Count" field should be removed. If "count" is present in any
+    // of the field stats, then keep it.
+    remove_count = "True"
+    for a = 1 to agg.length do
+      stats = agg[a][2]
+      if self.in("count", stats) then remove_count = "False"
+    end
+    if remove_count then self.remove("Count")
 
     // Clean up workspace
     CloseView(view)
