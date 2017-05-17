@@ -449,26 +449,14 @@ Class "df" (tbl)
   EndItem
 
   /*
-  Simple wrappers to update_view() that allow you to update
-  CSVs and BIN files without having to open them first.
+  Simple wrapper to update_view() that allow you to update
+  BIN files without having to open them first.
   Does not support selection sets. If working on a selection set,
   the view is already open - see update_view().
+  
+  CSVs cannot be updated in this way - TransCAD cannot modify the
+  fields or data of an opened CSV file.
   */
-  Macro "update_csv" (csv_file) do
-
-    // Check file and extension
-    if GetFileInfo(csv_file) = null
-      then Throw("update_csv: file does not exist")
-    a_parts = ParseString(csv_file, ".")
-    ext = a_parts[2]
-    if ext <> "csv" then Throw("update_csv: file not a .csv")
-
-    // Open the file and update it
-    view = OpenTable("view", "CSV", {csv_file})
-    self.update_view(view)
-    CloseView(view)
-    DeleteFile(Substitute(csv_file, ".csv", ".DCC", ))
-  EndItem
 
   Macro "update_bin" (bin_file) do
 
