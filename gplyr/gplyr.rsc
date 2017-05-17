@@ -1626,6 +1626,20 @@ Macro "test gplyr"
   for a = 1 to answer.length do
     if df.tbl.bin[a] <> answer[a] then Throw("test: bin_field() failed")
   end
+  
+  // test update_bin (which also tests update_view)
+  temp_bin_file = GetTempFileName(".bin")
+  CopyTableFiles(, "FFB", bin_file, , temp_bin_file, )
+  answer = {5, 6, 7, 8, 9, 0}
+  tbl.test_col = A2V(answer)
+  df = CreateObject("df", tbl)
+  df.update_bin(temp_bin_file)
+  df = CreateObject("df")
+  df.read_bin(temp_bin_file)
+  for a = 1 to answer.length do
+    if df.tbl.test_col[a] <> answer[a] then Throw("test: update_bin() failed")
+  end
+  
 
   ShowMessage("Passed Tests")
 EndMacro
