@@ -439,8 +439,9 @@ Class "df" (tbl)
     fields = self.colnames()
     for f = 1 to fields.length do
       field = fields[f]
+      field_type = self.tbl.(field).type
 
-      if self.tbl.(field).type = "integer" then type = "Integer"
+      if self.in(field_type, {"integer", "short", "long"}) then type = "Integer"
       else if self.tbl.(field).type = "string" then type = "Character"
       else type = "Real"
 
