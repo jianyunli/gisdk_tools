@@ -10,11 +10,14 @@ tbl
   Optional argument to load table data upon creation
   If null, the data frame is created empty
 
-Create a data_frame by calling
-df = CreateObject("data_frame")
+Create an empty data_frame by calling
+df = CreateObject("df")
+
+Create a data frame with a starting table by passing a named array
+df = CreateObject("df", tbl)
 
 This package is open source and hosted here:
-https://github.com/dkyleward/gplyr
+https://github.com/pbsag/gplyr
 */
 
 Class "df" (tbl)
