@@ -153,7 +153,7 @@ Class "df" (tbl)
     colnames = self.colnames()
     dim a_types[colnames.length]
     for c = 1 to colnames.length do
-      colname = self.check_name(colnames[c])
+      colname = colnames[c]
       
       v = self.get_vector(colname)
       a_types[c] = v.type
@@ -172,6 +172,7 @@ Class "df" (tbl)
     if self.is_empty() then return()
     if field_name = null then Throw("get_vector: 'field_name' not provided")
     
+    field_name = self.check_name(field_name)
     v = self.tbl.(field_name)
     return(v)
   EndItem
@@ -330,9 +331,9 @@ Class "df" (tbl)
     for r = 1 to self.nrow() do
       line = null
       for c = 1 to colnames.length do
-        colname = self.check_name(colnames[c])
+        colname = colnames[c]
 
-        vec = self.tbl.(colname)
+        vec = self.get_vector(colname)
         type = vec.type
 
         strVal = if type = "string" then vec[r]
@@ -694,7 +695,7 @@ Class "df" (tbl)
       // Check to see if name is in table
       if !(self.in(field, self.colnames()))
         then Throw("select: field '" + field + "' not in data frame")
-      data.(field) = self.tbl.(self.check_name(field))
+      data.(field) = self.get_vector(field)
     end
     self.tbl = data
   EndItem
