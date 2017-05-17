@@ -447,9 +447,9 @@ Class "df" (tbl)
 
       a_fields =  {{field, type, 8, 2,,,, ""}}
       RunMacro("TCB Add View Fields", {view, a_fields})
-
-      SetDataVector(view + "|" + set, field, self.tbl.(field), )
     end
+    
+    SetDataVectors(view + "|" + set, self.tbl, )
   EndItem
 
   /*
