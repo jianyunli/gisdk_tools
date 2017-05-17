@@ -357,21 +357,20 @@ Class "df" (tbl)
       fields = GetFields(view, )
       fields = fields[1]
     end
+    
+    // When a view has too many rows, a "???" will appear in the editor
+    // meaning that TC did not load the entire view into memory.
+    // Creating a selection set will force TC to load the entire view.
+    SetView(view)
+    qry = "Select * where nz(" + fields[1] + ") >= 0"
+    SelectByQuery("temp", "Several", qry)
 
+    data = GetDataVectors(view + "|" + set, fields, )
     for f = 1 to fields.length do
       field = fields[f]
-
-      // When a view has too many rows, a "???" will appear in the editor
-      // meaning that TC did not load the entire view into memory.
-      // Creating a selection set will force TC to load the entire view.
-      if f = 1 then do
-        SetView(view)
-        qry = "Select * where nz(" + field + ") >= 0"
-        SelectByQuery("temp", "Several", qry)
-      end
-
-      self.tbl.(field) = GetDataVector(view + "|" + set, field, )
+      self.tbl.(field) = data[f]
     end
+    
     self.check()
   EndItem
 
@@ -1392,7 +1391,7 @@ endClass
 Unit test macro
 Runs through all the methods and writes out results
 */
-Macro "test"
+Macro "test gplyr"
 
   // Input files used in some tests
   dir = "C:\\projects/gisdk_tools/gplyr/unit_test_data"
