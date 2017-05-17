@@ -189,12 +189,32 @@ Class "df" (tbl)
   /*
   Adds a field to the data frame
 
-  vector
-    Array or Vector
+  name
+    String
+    Field name
+    
+  data
+    Single value, array, or vector
   */
 
-  Macro "mutate" (name, vector) do
-    self.tbl.(name) = vector
+  Macro "mutate" (name, data) do
+  
+    data_type = TypeOf(data)
+    if data_type <> "array" and data_type <> "vector" then do
+      if data_type = "int" then type = "Integer"
+      else if data_type = "double" then type = "Real"
+      else if data_type = "string" then type = "Character"
+      else Throw(
+        "mutate: 'data' type not recognized.|" +
+        "Should be array, vector, int, double, or string."
+        )
+      
+      opts = null
+      opts.Constant = data
+      data = Vector(self.nrow(), type, opts)
+    end
+  
+    self.tbl.(name) = data
     self.check()
   EndItem
 
@@ -1398,7 +1418,6 @@ Macro "test gplyr"
   df = CreateObject("df", array)
 
   // test check (which is called by mutate)
-  /*df.mutate("bad1", 5)      // raises a type error*/
   /*df.mutate("bad2", {1, 2}) // raises a length error*/
 
   // test nrow/ncol
@@ -1411,7 +1430,7 @@ Macro "test gplyr"
   colnames = df.colnames()
   if colnames.length <> 2 then Throw("test: copy failed")
 
-  // test addition
+  // test mutate
   df.mutate("addition", df.tbl.ID + df.tbl.HH)
   /*
   Addition can also be done like so, but mutate() builds in an auto check()
@@ -1420,6 +1439,11 @@ Macro "test gplyr"
   answer = {5, 7, 9}
   for a = 1 to answer.length do
     if df.tbl.addition[a] <> answer[a] then Throw("test: mutate failed")
+  end
+  // test mutate using single value
+  df.mutate("test", 0)
+  for a = 1 to df.nrow() do
+    if df.tbl.test[a] <> 0 then Throw("test: mutate failed using single value")
   end
 
   // test check_name
