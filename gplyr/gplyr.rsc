@@ -142,6 +142,41 @@ Class "df" (tbl)
   EndItem
 
   /*
+  Returns an array of column types (integer, string, etc.)
+  */
+  
+  Macro "coltypes" do
+  
+    // Argument checking
+    if self.is_empty() then return()
+    
+    colnames = self.colnames()
+    dim a_types[colnames.length]
+    for c = 1 to colnames.length do
+      colname = self.check_name(colnames[c])
+      
+      v = self.get_vector(colname)
+      a_types[c] = v.type
+    end
+    
+    return(a_types)
+  EndItem
+
+  /*
+  Returns a vector of table data given a field name
+  */
+  
+  Macro "get_vector" (field_name) do
+  
+    // Argument checking
+    if self.is_empty() then return()
+    if field_name = null then Throw("get_vector: 'field_name' not provided")
+    
+    v = self.tbl.(field_name)
+    return(v)
+  EndItem
+
+  /*
   Returns number of columns
   */
 
@@ -573,7 +608,7 @@ Class "df" (tbl)
 
   Macro "create_view" do
 
-    // Convert the data frame object into a CSV
+    // Convert the data frame object into a bin file
     tempFile = GetTempFileName(".bin")
     self.write_bin(tempFile)
 
@@ -1472,6 +1507,15 @@ Macro "test gplyr"
   for a = 1 to names.length do
     if check[a] <> names[a] then Throw("test: colnames failed")
   end
+  
+  // test coltypes
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  types = df.coltypes()
+  answer = {"string", "string", "long", "long"}
+  for a = 1 to answer.length do
+    if types[a] <> answer[a] then Throw("test: coltypes failed")
+  end  
 
   // test read_csv and read_bin (which test read_view)
   df = CreateObject("df")
