@@ -1319,9 +1319,9 @@ Class "df" (tbl)
     // Argument check
     if key = null then key = "key"
     if value = null then value = "value"
-    if gather_cols = null then Throw("gather: 'key' missing")
     if TypeOf(gather_cols) <> "vector" and TypeOf(gather_cols) <> "array"
       then Throw("gather: 'gather_cols' must be an array or vector")
+    if gather_cols.length = 0 then Throw("gather: 'gather_cols' missing")
 
     // Create a seed df that will be used to build new table
     seed = self.copy()
