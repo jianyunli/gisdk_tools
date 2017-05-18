@@ -177,7 +177,11 @@ Class "df" (tbl)
   EndItem
 
   /*
-  Returns an array of column types (integer, string, etc.)
+  Returns an array of column types. Types possible types returned are
+  short
+  long
+  double
+  string
   */
   
   Macro "coltypes" do
@@ -399,18 +403,74 @@ Class "df" (tbl)
     if Right(file, 3) <> "bin"
       then Throw("write_bin: file name must end with '.bin'")
 
-    // First write to csv
-    csv_file = Substitute(file, ".bin", ".csv", )
-    self.write_csv(csv_file)
+    // Create the field info array for CreateTable()
+    colnames = self.colnames()
+    coltypes = self.coltypes()
+    colwidths = self.colwidths()
+    for c = 1 to colnames.length do
+      colname = colnames[c]
+      coltype = coltypes[c]
+      width = colwidths[c]
+      
+      if coltype = "short" then coltype = "Integer"
+      else if coltype = "long" then coltype = "Integer"
+      else if coltype = "double" then coltype = "Real"
+      else if coltype = "string" then coltype = "String"
+      
+      deci = if coltype = "Real" then 2 else 0
+      a_field_info = a_field_info + {{colname, coltype, width, deci, }}
+    end
 
-    // Open and export that csv to a bin
-    view = OpenTable("csv", "CSV", {csv_file})
-    ExportView(view + "|", "FFB", file, , )
+    // Create table
+    view_name = self.unique_view_name()
+    view_name = CreateTable(view_name, file, "FFB", a_field_info, )
+    
+    // Add empty rows
+    opts = null
+    opts.[empty records] = self.nrow()
+    AddRecords(view_name, , , opts)
+    
+    // Fill in data
+    self.update_view(view_name)
+    
+    CloseView(view_name)
+  EndItem
 
-    // Clean up workspace
-    CloseView(view)
-    DeleteFile(csv_file)
-    DeleteFile(Substitute(csv_file, ".csv", ".DCC", ))
+  /*
+  Get column width(s)
+  
+  Input
+    field_names
+      Optional string or array/vector of strings If provided, the width of the
+      specified column will be returned. Otherwise, a vector of all column
+      widths will be returned.
+  */
+  
+  Macro "colwidths" (field_names) do
+  
+    // Argument check
+    if field_names = null then field_names = self.colnames()
+    if TypeOf(field_names) = "string" then do
+      field_names = {field_names}
+      was_string = "True"
+    end
+    if TypeOf(field_names) = "vector" then field_names = V2A(field_names)
+    
+    dim final[field_names.length]
+    for f = 1 to field_names.length do
+      field_name = field_names[f]
+      
+      v = self.get_vector(field_name)
+      v = if v.type <> "string" then String(v) else v
+      v = StringLength(v)
+      len = ArrayMax(V2A(v))
+      
+      final[f] = len
+    end
+    
+    final = if was_string then final[1] else A2v(final)
+    
+    return(final)
   EndItem
 
   /*
@@ -530,10 +590,11 @@ Class "df" (tbl)
     fields = self.colnames()
     for f = 1 to fields.length do
       field = fields[f]
-      field_type = self.tbl.(field).type
+      field_r = self.check_name(field)
+      field_type = self.tbl.(field_r).type
 
       if self.in(field_type, {"integer", "short", "long"}) then type = "Integer"
-      else if self.tbl.(field).type = "string" then type = "Character"
+      else if field_type = "string" then type = "Character"
       else type = "Real"
 
       a_fields =  {{field, type, 8, 2,,,, ""}}
@@ -648,9 +709,19 @@ Class "df" (tbl)
     tempFile = GetTempFileName(".bin")
     self.write_bin(tempFile)
 
-    // Avoid duplciating view names by using an
-    // odd name and adding a number based on views open.
-    // Check to make sure view does not already exist.
+    // Generate a unique view name and open table
+    view_name = self.unique_view_name()
+    view_name = OpenTable(view_name, "FFB", {tempFile}, )
+
+    return({view_name, tempFile})
+  EndItem
+
+  /*
+  Avoids duplciating view names by using an odd name and adding a number based
+  on views open. Check to make sure view does not already exist.
+  */
+  
+  Macro "unique_view_name" do
     view_names = GetViews()
     if view_names.length = 0 then do
       view_name = "gplyr1"
@@ -666,10 +737,10 @@ Class "df" (tbl)
           else "False"
       end
     end
-    view_name = OpenTable(view_name, "FFB", {tempFile}, )
-
-    return({view_name, tempFile})
+    
+    return(view_name)
   EndItem
+  
 
   /*
   Only used in development/debugging, an editor is a visible
@@ -1185,18 +1256,14 @@ Class "df" (tbl)
       join_col = first_col.colnames()
       join_col = join_col[1]
     end
-    opts = null
-    opts.Unique = "True"
-    vec = SortVector(first_col.tbl.(join_col), opts)
+    vec = first_col.unique(join_col)
     first_col.mutate(join_col, vec)
 
     // Create a second working table.
     split = self.copy()
     // If necessary, combine columns in `split` to match `first_col` table
     if unite then split.unite(a_unite_cols, join_col, "%^&")
-    opts = null
-    opts.Unique = "True"
-    a_unique_keys = SortVector(split.tbl.(key), opts)
+    a_unique_keys = split.unique(key)
     for k = 1 to a_unique_keys.length do
       key_val = a_unique_keys[k]
 
@@ -1562,7 +1629,16 @@ Macro "test gplyr"
   for a = 1 to answer.length do
     if types[a] <> answer[a] then Throw("test: coltypes failed")
   end  
-
+  
+  // test colwidths
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  widths = df.colwidths()
+  answer = {6, 6, 3, 1}
+  for a = 1 to answer.length do
+    if widths[a] <> answer[a] then Throw("test: colwidths failed")
+  end  
+  
   // test read_csv and read_bin (which test read_view)
   df = CreateObject("df")
   df.read_csv(csv_file)
