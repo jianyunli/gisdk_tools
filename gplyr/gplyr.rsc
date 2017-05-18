@@ -55,7 +55,10 @@ Class "df" (tbl)
   Macro "check_name" (field_name) do
 
     // Argument check
-    if TypeOf(field_name) = "string" then field_name = {field_name}
+    if TypeOf(field_name) = "string" then do
+      field_name = {field_name}
+      input_was_string = "True"
+    end
     if TypeOf(field_name) = "vector" then field_name = V2A(field_name)
     if TypeOf(field_name) <> "array"
       then Throw("check_name: 'field_name' must be string, array, or vector")
@@ -66,6 +69,38 @@ Class "df" (tbl)
 
       name = if self.in(name, a_reserved)
         then "[" + name + "]"
+        else name
+
+      a_result = a_result + {name}
+    end
+
+    if input_was_string
+      then return(a_result[1])
+      else return(A2V(a_result))
+  EndItem
+
+  /*
+  The opposite of check_name. Returns field names with brackets removed.
+  
+  Inputs
+    field_name
+      String or array of strings
+      Field names to be processed
+  */
+  
+  Macro "uncheck_name" (field_name) do
+    
+    // Argument check
+    if TypeOf(field_name) = "string" then field_name = {field_name}
+    if TypeOf(field_name) = "vector" then field_name = V2A(field_name)
+    if TypeOf(field_name) <> "array"
+      then Throw("check_name: 'field_name' must be string, array, or vector")
+
+    for f = 1 to field_name.length do
+      name = field_name[f]
+
+      name = if Left(name, 1) = "["
+        then Substring(name, 2, StringLength(name) - 2)
         else name
 
       a_result = a_result + {name}
@@ -1448,7 +1483,9 @@ endClass
 
 /*
 Unit test macro
-Runs through all the methods and writes out results
+Runs through all the methods and writes out results. To use this macro, either:
+preferred: clone gisdk_tools to the "dir" listed below on your machine or 
+alternative: change the dir variable, but do not commit the change.
 */
 Macro "test gplyr"
 
@@ -1508,6 +1545,14 @@ Macro "test gplyr"
   for a = 1 to names.length do
     if check[a] <> names[a] then Throw("test: colnames failed")
   end
+  // test 2 (checks to make sure reserved name Length is handled)
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  names = df.colnames()
+  answer = {"Size", "Color", "Count", "Length"}
+  for a = 1 to names.length do
+    if names[a] <> answer[a] then Throw("test: colnames failed")
+  end  
   
   // test coltypes
   df = CreateObject("df")
