@@ -114,6 +114,9 @@ Macro "Hourly Capacity" (rscriptexe, rscript, hwy_dbd, output_dir)
       Throw("See 'Highway Links with Errors.csv' in the scenario Output folder")
   end
 
+  CloseView(csv)
+  DeleteFile(rCSV)
+  DeleteFile(Substitute(rCSV, ".csv", ".DCC", ))
 EndMacro
 
 /*
