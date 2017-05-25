@@ -27,14 +27,128 @@ MacroOpts
     Real
     Angle, in degrees, of the line.
     
-  length
+  line_length
     Real
     Length of the line to add
     
   midpoint
+    Coordinate object
+    The coordinate of the midpoint of the line
     
+Returns
+  ID of the newly-created link
     
-    
-  mapcoordtoxy
-  mapxytocoord
 */
+
+Macro "Add Link" (MacroOpts)
+  
+  // Extract arguments from MacroOpts
+  line_dbd = MacroOpts.line_dbd
+  azimuth = MacroOpts.azimuth
+  line_length = MacroOpts.line_length
+  midpoint = MacroOpts.midpoint
+  
+  // Argument check
+  if line_dbd = null then Throw("'line_dbd' is missing")
+  if azimuth = null then Throw("'azimuth' is missing")
+  if line_length = null then Throw("'line_length' is missing")
+  if midpoint = null then Throw("'midpoint' is missing")
+  // Make sure azimuth is between 0 and 360
+  azimuth = Mod(azimuth, 360)
+  
+  // Determine if the line_dbd needs to be created (if it is not a layer
+  // in the current map)
+  create_line_dbd = "true"
+  map = GetMap()
+  if map <> null then do
+    a_layers = GetMapLayers(map, "All")
+    a_layers = a_layers[1]
+    for l = 1 to a_layers.length do
+      layer = a_layers[l]
+      
+      check_dbd = GetLayerDB(layer)
+      // GetLayerDB() returns a string with "\"s and extension ".DBD". 
+      // Make sure line_dbd looks the same way before checking.
+      line_dbd = Substitute(line_dbd, "/", "\\", )
+      line_dbd = Substitute(line_dbd, ".dbd", ".DBD", )
+      if check_dbd = line_dbd then do
+        create_line_dbd = "false"
+        {nlyr, llyr} = GetDBLayers(line_dbd)
+      end
+    end
+  end
+  
+  // If needed, create line_dbd geographic file that will contain the
+  // count points converted to line segments.
+  if create_line_dbd then do
+    opts = null
+    opts.Label = "Count points converted to lines"
+    opts.[Layer Name] = "Count Lines"
+    opts.[Node Layer Name] = "Count Line Nodes"
+    CreateDatabase(line_dbd, "Line", opts)
+    {nlyr, llyr} = GetDBLayers(line_dbd)
+    
+    // If no map is present, create one
+    if map = null then map = RunMacro("G30 new map", line_dbd)
+    // otherwise, add the new layers to the map
+    else do
+      AddLayer(map, nlyr, line_dbd, nlyr)
+      AddLayer(map, llyr, line_dbd, llyr)
+      RunMacro("G30 new layer default settings", nlyr)
+      RunMacro("G30 new layer default settings", llyr)
+    end
+  end
+ 
+  /*
+  Determine which quadrant the angle is in. TC sets 0 degrees as
+  due north so the quadrants look like so:
+
+  4   |   1
+  ---------
+  3   |   2
+  */
+  quadrant = Ceil(azimuth / 90)
+  {midpoint_x, midpoint_y} = MapCoordToXY(map, midpoint)
+  pi = 3.14159
+  // TC Sin() and Cos() work in radians, so much convert.
+  // 360 degrees = 2pi radians
+  // 180 degrees =  pi radians
+  angle_radians = azimuth * pi / 180
+  
+  // If in quadrant 1
+  if quadrant = 1 then do
+    x_delta = Sin(angle_radians) * (line_length / 2)
+    y_delta = Cos(angle_radians) * (line_length / 2)
+  end
+  
+  // If in quadrant 2
+  if quadrant = 2 then do
+    x_delta = Sin(pi - angle_radians) * (line_length / 2)
+    y_delta = (Cos(pi - angle_radians) * (line_length / 2)) * -1
+  end
+  
+  // If in quadrant 3
+  if quadrant = 3 then do
+    x_delta = (Sin(angle_radians - pi) * (line_length / 2)) * -1
+    y_delta = (Cos(angle_radians - pi) * (line_length / 2)) * -1
+  end
+  
+  // If in quadrant 4
+  if quadrant = 4 then do
+    x_delta = (Sin(2 * pi - angle_radians) * (line_length / 2)) * -1
+    y_delta = Cos(2 * pi - angle_radians) * (line_length / 2)
+  end
+  
+  x1 = midpoint_x + x_delta
+  y1 = midpoint_y + y_delta
+  x2 = midpoint_x - x_delta
+  y2 = midpoint_y - y_delta
+  coord_e1 = MapXYToCoord(map, {x1, y1})
+  coord_e2 = MapXYToCoord(map, {x2, y2})
+
+  // Add the link
+  SetLayer(llyr)
+  new_id = AddLink({coord_e1, coord_e2}, , )
+  
+  return(new_id)
+EndMacro

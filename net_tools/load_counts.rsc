@@ -1,3 +1,20 @@
+Macro "test load"
+  
+  RunMacro("Close All")
+  
+  dir = "C:\\count_loading"
+  opts.hwy_dbd = dir + "/Oahu Network 102907.dbd"
+  opts.count_dbd = dir + "/2005 OahuFinalCounts_mar2508.dbd"
+  opts.hwy_exclusion_query = "[AB FACTYPE] = 12"
+  /*opts.max_search_dist
+  opts.row_dist*/
+  opts.road_name_field = "[Road Name]"
+  opts.road_lane_fields = {"AB_LANEA", "BA_LANEA", "AB_LANEM", "BA_LANEM", "AB_LANEP", "BA_LANEM"}
+  opts.count_station_field = "ID"
+  opts.count_volume_field = "AADT"
+  RunMacro("Load Counts", opts)
+EndMacro
+
 /*
 This macro loads count data from a point geographic file onto a highway
 line geographic file.
@@ -106,9 +123,17 @@ Macro "Load Counts" (MacroOpts)
   {nlyr, llyr} = GetDBLayers(hwy_dbd)
   {clyr} = GetDBLayers(count_dbd)
   AddLayer(map, clyr, count_dbd, clyr)
+  RunMacro("G30 new layer default settings", clyr)
   SetMapUnits("Feet")
   SetSelectDisplay("False")
   MinimizeWindow(GetWindowName())
+  
+  // Define the file path of line geographic file that will contain the count
+  // points converted to line segments. Also, delete it if it already exists.
+  a_path = SplitPath(hwy_dbd)
+  scratch_dir = a_path[1] + a_path[2]
+  scratch_dbd = scratch_dir + "count_lines.dbd"
+  if GetFileInfo(scratch_dbd) <> null then DeleteDatabase(scratch_dbd)
   
   // Add count fields to the highway layer.
   // Check to see if the count station id is a string or numeric.
@@ -122,7 +147,7 @@ Macro "Load Counts" (MacroOpts)
     {"count_vol_lc", "Integer", 10, 3,,,,"Count ID as tagged by the Load Counts macro"},
     {"check_lc", "Character", 30, ,,,,"Reason why a manual check might be necessary"}
   }
-  a_initial_values = {null, null}
+  a_initial_values = {null, null, null}
   RunMacro("Add Fields", llyr, a_fields, a_initial_values)
   
   // Create a set of links to exclude from tagging
@@ -137,18 +162,19 @@ Macro "Load Counts" (MacroOpts)
   // Loop over each count
   v_cid = GetDataVector(clyr + "|", "ID", )
   v_csid = GetDataVector(clyr + "|", count_station_field, )
-  for c = 1 to v_cid.length do
+
+  for c = 7 to v_cid.length do
     cid = v_cid[c]
     csid = v_csid[c]
     
     // Put the current count into its own selection set and get its coordinates
     SetLayer(clyr)
-    if ArrayPosition(GetSets(clyr), {current_count_set}) > 0
+    if ArrayPosition(GetSets(clyr), {current_count_set}, ) > 0
       then DeleteSet(current_count_set)
     current_count_set = CreateSet("current count")
     crh = ID2RH(cid)
-    SelectRecord(crh)
-    SetRecord(crh)
+    SetRecord(clyr, crh)
+    SelectRecord(current_count_set)
     count_coord = Coord(clyr.Longitude, clyr.Latitude)
     
     // Select the nearest link to the current count
@@ -160,7 +186,7 @@ Macro "Load Counts" (MacroOpts)
     n = SelectNearestFeatures(
       nearest_link_set, "Several", clyr + "|" + current_count_set,
       max_search_dist, opts)
-    
+ 
     // Continue if a link was selected
     if n > 0 then do
       // Get link id and set it as the current record
@@ -168,7 +194,7 @@ Macro "Load Counts" (MacroOpts)
       lid = GetSetIDs(llyr + "|" + nearest_link_set)
       lid = lid[1]
       lrh = ID2RH(lid)
-      SetRecord(lrh)
+      SetRecord(llyr, lrh)
       
       // Mark the check field if the link is < 200 feet. These links can
       // be problematic. Their azimuth may not line up. Often they represent
@@ -182,16 +208,15 @@ Macro "Load Counts" (MacroOpts)
       // Draw a line passing through the count and perpendicular to the
       // nearest link.
       opts = null
-      opts.line_dbd = 
-      opts.azimuth = az + 90
-      opts.length = row_dist
+      opts.line_dbd = scratch_dbd
+      opts.azimuth = az + 90  
+      opts.line_length = row_dist
       opts.midpoint = count_coord
       opts.identifier = csid
-      RunMacro("Add Link")
-    
+      new_id = RunMacro("Add Link", opts)
     end
     
-    SelectRecord()
+    //SelectRecord()
     
   end
   
