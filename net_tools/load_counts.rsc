@@ -163,7 +163,7 @@ Macro "Load Counts" (MacroOpts)
   v_cid = GetDataVector(clyr + "|", "ID", )
   v_csid = GetDataVector(clyr + "|", count_station_field, )
 
-  for c = 7 to v_cid.length do
+  for c = 1 to v_cid.length do
     cid = v_cid[c]
     csid = v_csid[c]
     
@@ -213,10 +213,40 @@ Macro "Load Counts" (MacroOpts)
       opts.line_length = row_dist
       opts.midpoint = count_coord
       opts.identifier = csid
-      new_id = RunMacro("Add Link", opts)
+      {perp_id, perp_llyr} = RunMacro("Add Link", opts)
+      
+      // Place this new link into a fresh selection set
+      SetLayer(perp_llyr)
+      if ArrayPosition(GetSets(clyr), {current_perp_line_set}, ) > 0
+        then DeleteSet(current_perp_line_set)
+      current_perp_line_set = CreateSet("current perp line")
+      SetRecord(perp_llyr, ID2RH(perp_id))
+      SelectRecord(current_perp_line_set)
+      
+      // Select the roadway links touching the new line
+      SetLayer(llyr)
+      SetSelectInclusion("Intersecting")
+      opts = null
+      opts.[Source Not] = excluded_set
+      potential_count_links = SelectByVicinity(
+        "potential count links",
+        "several",
+        perp_llyr + "|" + current_perp_line_set,
+        null
+      )
+      
+      // Remove links that don't have the same road name
+      if road_name_field <> null then do
+        qry = "Select * where " + 
+          road_name_field + " <> '" + llyr.(road_name_field) + "'"
+        SelectByVicinity(potential_count_links, "less", qry)
+      end
+      
+      
+      
+      Throw()
     end
     
-    //SelectRecord()
     
   end  
 EndMacro

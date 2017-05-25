@@ -148,7 +148,8 @@ Macro "Add Link" (MacroOpts)
 
   // Add the link
   SetLayer(llyr)
-  new_id = AddLink({coord_e1, coord_e2}, , )
+  a_returned = AddLink({coord_e1, coord_e2}, , )
+  new_id = a_returned[1]
   
-  return(new_id)
+  return({new_id, llyr})
 EndMacro
