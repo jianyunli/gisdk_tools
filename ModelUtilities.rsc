@@ -745,11 +745,14 @@ Macro "Add Fields" (view, a_fields, a_initial_values)
     length = GetRecordCount(view, )
     for f = 1 to a_initial_values.length do
       field = a_fields[f][1]
+      type = a_fields[f][2]
       init_value = a_initial_values[f]
+      
+      if type = "Character" then type = "String"
       
       opts = null
       opts.Constant = init_value
-      v = Vector(length, TypeOf(init_value))
+      v = Vector(length, type)
     end
   end
 EndMacro
