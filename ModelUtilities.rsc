@@ -753,6 +753,7 @@ Macro "Add Fields" (view, a_fields, a_initial_values)
       opts = null
       opts.Constant = init_value
       v = Vector(length, type)
+      SetDataVector(view + "|", field, v, )
     end
   end
 EndMacro
