@@ -203,7 +203,7 @@ Macro "Load Counts" (MacroOpts)
       
       // Determine the azimuth/heading of the link using its endpoints
       a_pts = GetLine(lid)
-      az = Azimuth(a_pts[1], a_pts[a_pts.length])
+      az = RunMacro("Get Local Azimuth", count_coord, a_pts)
       
       // Draw a line passing through the count and perpendicular to the
       // nearest link.
@@ -218,8 +218,45 @@ Macro "Load Counts" (MacroOpts)
     
     //SelectRecord()
     
+  end  
+EndMacro
+
+/*
+Given a count point and the array of shape points returned by
+GetLine() for the nearest line segment, return the azimuth/heading
+of the nearest 2 shape points.
+
+Inputs
+  count_point
+    Coordinate
+    Coordinate of the count point
+  
+  line_points
+    Array of coordinates returned by GetLine()
+*/
+
+Macro "Get Local Azimuth" (count_point, line_points)
+
+  // Determine the two shape points nearest to the count_point
+  a_dist = {999999999, 999999999}
+  dim a_pts[2]
+  for p = 1 to line_points.length do
+    line_point = line_points[p]
+    
+    dist = GetDistance(count_point, line_point)
+    if dist < a_dist[1] then do
+      a_dist[2] = a_dist[1]
+      a_pts[2] = a_pts[1]
+      a_dist[1] = dist
+      a_pts[1] = line_point
+    end else if dist < a_dist[2] then do
+      a_dist[2] = dist
+      a_pts[2] = line_point
+    end
   end
   
+  // Get the azimuth of the two nearest points
+  az = Azimuth(a_pts[1], a_pts[2])
   
-  
+  return(az)
 EndMacro
