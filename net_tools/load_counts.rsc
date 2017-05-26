@@ -1,6 +1,7 @@
 Macro "test load"
   
   RunMacro("Close All")
+  RunMacro("Destroy Progress Bars")
   
   dir = "C:\\count_loading"
   opts.hwy_dbd = dir + "/Oahu Network 102907.dbd"
@@ -13,6 +14,7 @@ Macro "test load"
   opts.count_station_field = "ID"
   opts.count_volume_field = "AADT"
   RunMacro("Load Counts", opts)
+  ShowMessage("Done")
 EndMacro
 
 /*
@@ -47,7 +49,7 @@ MacroOpts
 
   row_dist
     Integer
-    Default = 100 feet
+    Default = 200 feet
     Right of way distance. If an initial link is found within the max_search_dist,
     then a perpendicular line will be drawn to look for other links that might
     be representing the same facility. This variable (row_dist) is the length
@@ -116,7 +118,7 @@ Macro "Load Counts" (MacroOpts)
   
   // Set default values
   if max_search_dist = null then max_search_dist = 100
-  if row_dist = null then row_dist = 100
+  if row_dist = null then row_dist = 200
   if count_station_field = null then count_station_field = "ID"
   
   // Make sure road_lane_fields has only unique names
@@ -151,12 +153,28 @@ Macro "Load Counts" (MacroOpts)
     then "Character"
     else "Integer"
   a_fields = {
-    {"count_sid_lc", type, 10, ,,,,"Count Station ID as tagged by the Load Counts macro"},
-    {"count_vol_lc", "Integer", 10, 3,,,,"Count ID as tagged by the Load Counts macro"},
-    {"check_lc", "Character", 30, ,,,,"Reason why a manual check might be necessary"}
+    {
+      "count_sid_lc", type, 10, ,,,,
+      "Count Station ID as tagged by the Load Counts macro"
+    },
+    {
+      "count_vol_lc", "Integer", 10, 3,,,,
+      "Count ID as tagged by the Load Counts macro"
+    }
   }
-  a_initial_values = {null, null, null}
+  a_initial_values = {null, null}
   RunMacro("Add Fields", llyr, a_fields, a_initial_values)
+  
+  // Add one field to the count layer that will note any issues encountered
+  // during the tagging process.
+  a_fields = {
+    {
+      "check_lc", "Character", 30, ,,,,
+      "Reason why a manual check might be necessary"
+    }
+  }
+  a_initial_values = {null}
+  RunMacro("Add Fields", clyr, a_fields, a_initial_values)  
   
   // Create a set of links to exclude from tagging
   if Left(hwy_exclusion_query, 15) <> "Select * where "
@@ -171,8 +189,7 @@ Macro "Load Counts" (MacroOpts)
   v_cid = GetDataVector(clyr + "|", "ID", )
   v_csid = GetDataVector(clyr + "|", count_station_field, )
 
-  /*for c = 1 to v_cid.length do*/
-  for c = 1 to 5 do
+  for c = 1 to v_cid.length do
     cid = v_cid[c]
     csid = v_csid[c]
     
@@ -180,7 +197,11 @@ Macro "Load Counts" (MacroOpts)
       "Loading count " + String(c) + " of " + String(v_cid.length),
       round(c / v_cid.length * 100, 0)
     )
-    if cancelled then Throw("Count Loading Cancelled")
+    if cancelled then do
+      DestroyProgressBar()
+      RunMacro("Close All")
+      Throw("Count Loading Cancelled")
+    end
     
     // Put the current count into its own selection set and get its coordinates
     SetLayer(clyr)
@@ -200,79 +221,84 @@ Macro "Load Counts" (MacroOpts)
     opts.[Source Not] = excluded_set
     n = SelectNearestFeatures(
       nearest_link_set, "Several", clyr + "|" + current_count_set,
-      max_search_dist, opts)
+      max_search_dist, opts
+    )
+    if n = 0 then continue
  
-    // Continue if a link was selected
-    if n > 0 then do
-      // Get link id and set it as the current record
-      SetLayer(llyr)
-      lid = GetSetIDs(llyr + "|" + nearest_link_set)
-      lid = lid[1]
-      lrh = ID2RH(lid)
-      SetRecord(llyr, lrh)
-      
-      // Mark the check field if the link is < 200 feet. These links can
-      // be problematic. Their azimuth may not line up. Often they represent
-      // model features that don't line up with real world infrastructure.
-      if llyr.Length < 200 then llyr.check_lc = "< 200 ft"
-      
-      // Determine the azimuth/heading of the link using its endpoints
-      a_pts = GetLine(lid)
-      az = RunMacro("Get Local Azimuth", count_coord, a_pts)
-      
-      // Draw a line passing through the count and perpendicular to the
-      // nearest link.
-      opts = null
-      opts.line_dbd = scratch_dbd
-      opts.azimuth = az + 90  
-      opts.line_length = row_dist
-      opts.midpoint = count_coord
-      opts.identifier = csid
-      {perp_id, perp_llyr} = RunMacro("Add Link", opts)
-      
-      // Place this new link into a fresh selection set
-      SetLayer(perp_llyr)
-      if ArrayPosition(GetSets(perp_llyr), {current_perp_line_set}, ) > 0
-        then DeleteSet(current_perp_line_set)
-      current_perp_line_set = CreateSet("current perp line")
-      SetRecord(perp_llyr, ID2RH(perp_id))
-      SelectRecord(current_perp_line_set)
-      
-      // Select the roadway links touching the new line
-      SetLayer(llyr)
-      SetSelectInclusion("Intersecting")
-      opts = null
-      opts.[Source Not] = excluded_set
-      potential_count_links = "potential count links"
-      initial = SelectByVicinity(
-        potential_count_links,
-        "several",
-        perp_llyr + "|" + current_perp_line_set,
-        null
-      )
-      
-      // Remove links that don't have the same road name
-      if road_name_field <> null then do
-        qry = "Select * where " + 
-          road_name_field + " <> '" + llyr.(road_name_field) + "'"
-        final = SelectByQuery(potential_count_links, "less", qry)
-        if final <> initial then llyr.check_lc = "some links dropped"
-      end
-      
-      // Assign the links with the count station ID
-      v_temp = GetDataVector(
-        llyr + "|" + potential_count_links,
-        "count_sid_lc",
-        null
-      )
-      v_temp = if v_temp = null then csid else v_temp
-      SetDataVector(
-        llyr + "|" + potential_count_links,
-        "count_sid_lc",
-        v_temp,
-        null        
-      )
+    // Get link id and set it as the current record
+    SetLayer(llyr)
+    lid = GetSetIDs(llyr + "|" + nearest_link_set)
+    lid = lid[1]
+    lrh = ID2RH(lid)
+    SetRecord(llyr, lrh)
+    
+    // Mark the check field if the link is < 200 feet. These links can
+    // be problematic. Their azimuth may not line up. Often they represent
+    // model features that don't line up with real world infrastructure.
+    if llyr.Length < 200 then clyr.check_lc = "< 200 ft"
+    
+    // Determine the azimuth/heading of the link using its endpoints
+    a_pts = GetLine(lid)
+    az = RunMacro("Get Local Azimuth", count_coord, a_pts)
+    
+    // Draw a line passing through the count and perpendicular to the
+    // nearest link.
+    opts = null
+    opts.line_dbd = scratch_dbd
+    opts.azimuth = az + 90  
+    opts.line_length = row_dist
+    opts.midpoint = count_coord
+    opts.identifier = csid
+    {perp_id, perp_llyr} = RunMacro("Add Link", opts)
+    
+    // Place this new link into a fresh selection set
+    SetLayer(perp_llyr)
+    if ArrayPosition(GetSets(perp_llyr), {current_perp_line_set}, ) > 0
+      then DeleteSet(current_perp_line_set)
+    current_perp_line_set = CreateSet("current perp line")
+    SetRecord(perp_llyr, ID2RH(perp_id))
+    SelectRecord(current_perp_line_set)
+    
+    // Select the roadway links touching the new line
+    SetLayer(llyr)
+    SetSelectInclusion("Intersecting")
+    opts = null
+    opts.[Source Not] = excluded_set
+    potential_count_links = "potential count links"
+    initial = SelectByVicinity(
+      potential_count_links,
+      "several",
+      perp_llyr + "|" + current_perp_line_set,
+      null, opts
+    )
+    // If there are no links found, note that and go to the next count point
+    if initial = 0 then do
+      clyr.check_lc = "no potential links found"
+      continue
     end
+    
+    // Remove links that don't have the same road name
+    if road_name_field <> null then do
+      qry = "Select * where " + 
+        road_name_field + " <> '" + llyr.(road_name_field) + "'"
+      final = SelectByQuery(potential_count_links, "less", qry)
+      // Note if links were dropped due to their road name
+      if final <> initial then clyr.check_lc = "links dropped by road name"
+    end
+    
+    // Assign the links with the count station ID
+    v_temp = GetDataVector(
+      llyr + "|" + potential_count_links,
+      "count_sid_lc",
+      null
+    )
+    v_temp = if v_temp = null then csid else v_temp
+    SetDataVector(
+      llyr + "|" + potential_count_links,
+      "count_sid_lc",
+      v_temp,
+      null        
+    )
   end  
   
   // Read the count view into a data frame
@@ -291,7 +317,7 @@ Macro "Load Counts" (MacroOpts)
   opts = null
   opts.view = llyr
   opts.set = "tagged"
-  opts.fields = {"ID", "count_sid_lc", "count_vol_lc", "check_lc"} + 
+  opts.fields = {"ID", "count_sid_lc", "count_vol_lc"} + 
     road_lane_fields
   link_df.read_view(opts)
   

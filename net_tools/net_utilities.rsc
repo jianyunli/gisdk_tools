@@ -110,7 +110,12 @@ Macro "Add Link" (MacroOpts)
   quadrant = Ceil(azimuth / 90)
   {midpoint_x, midpoint_y} = MapCoordToXY(map, midpoint)
   pi = 3.14159
-  // TC Sin() and Cos() work in radians, so much convert.
+  
+  // Once converted to XY coordinates, the units are meters.
+  // Must convert line_length to meters.
+  line_length = line_length * .3048
+  
+  // TransCAD Sin() and Cos() work in radians, so must convert.
   // 360 degrees = 2pi radians
   // 180 degrees =  pi radians
   angle_radians = azimuth * pi / 180
