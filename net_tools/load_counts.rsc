@@ -244,7 +244,7 @@ Macro "Load Counts" (MacroOpts)
       opts = null
       opts.[Source Not] = excluded_set
       potential_count_links = "potential count links"
-      SelectByVicinity(
+      initial = SelectByVicinity(
         potential_count_links,
         "several",
         perp_llyr + "|" + current_perp_line_set,
@@ -255,7 +255,8 @@ Macro "Load Counts" (MacroOpts)
       if road_name_field <> null then do
         qry = "Select * where " + 
           road_name_field + " <> '" + llyr.(road_name_field) + "'"
-        SelectByQuery(potential_count_links, "less", qry)
+        final = SelectByQuery(potential_count_links, "less", qry)
+        if final <> initial then llyr.check_lc = "some links dropped"
       end
       
       // Assign the links with the count station ID
