@@ -749,13 +749,37 @@ Class "df" (tbl)
 
   Calling create_editor automatically generates an error message
   to stop the code and allow you to view the table.  This also
-  prevents from ever being used in production code, and it never
+  prevents it from ever being used in production code, and it never
   should be.
+  
+  Inputs
+    other_dfs
+      Optional array of other df objects
+      If provided, these data frames will also be displayed in editors
   */
 
-  Macro "create_editor" do
+  Macro "create_editor" (other_dfs) do
     {view_name, file_name} = self.create_view()
     CreateEditor("data frame", view_name + "|", , )
+
+    // If other dfs are provided
+    if other_dfs <> null then do
+    
+      if TypeOf(other_dfs) <> "array" then other_dfs = {other_dfs}
+    
+      for i = 1 to other_dfs.length do
+        df = other_dfs[i]
+        if TypeOf(df) <> "object" then Throw(
+          "create_editor: 'other_dfs' does not have a df in position " + 
+          String(i)
+        )
+        df.check()
+        
+        {view_name, file_name} = df.create_view()
+        CreateEditor("data frame", view_name + "|", , )
+      end
+    end
+    
     Throw("Editor created to view\ndata frame contents")
   EndItem
 
