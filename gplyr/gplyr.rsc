@@ -410,7 +410,7 @@ Class "df" (tbl)
     for c = 1 to colnames.length do
       colname = colnames[c]
       coltype = coltypes[c]
-      width = colwidths[c]
+      width = max(colwidths[c], 10)
       
       if coltype = "short" then coltype = "Integer"
       else if coltype = "long" then coltype = "Integer"
