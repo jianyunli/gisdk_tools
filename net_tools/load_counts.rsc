@@ -1,25 +1,7 @@
-Macro "test load"
-  
-  RunMacro("Close All")
-  RunMacro("Destroy Progress Bars")
-  
-  dir = "C:\\count_loading"
-  opts.hwy_dbd = dir + "/Oahu Network 102907.dbd"
-  opts.count_dbd = dir + "/2005 OahuFinalCounts_mar2508.dbd"
-  opts.hwy_exclusion_query = "[AB FACTYPE] = 12"
-  /*opts.max_search_dist
-  opts.row_dist*/
-  opts.road_name_field = "[Road Name]"
-  opts.road_lane_fields = {"AB_LANEA", "BA_LANEA", "AB_LANEM", "BA_LANEM", "AB_LANEP", "BA_LANEP"}
-  opts.count_station_field = "ID"
-  opts.count_volume_field = "AADT"
-  RunMacro("Load Counts", opts)
-  ShowMessage("Done")
-EndMacro
-
 /*
 This macro loads count data from a point geographic file onto a highway
-line geographic file.
+line geographic file. (At the bottom of this rsc file is a "test load count"
+macro that provides an example.)
 
 Inputs
 MacroOpts
@@ -223,7 +205,10 @@ Macro "Load Counts" (MacroOpts)
       nearest_link_set, "Several", clyr + "|" + current_count_set,
       max_search_dist, opts
     )
-    if n = 0 then continue
+    if n = 0 then do
+      clyr.check_lc = "no nearest link"
+      continue
+    end
  
     // Get link id and set it as the current record
     SetLayer(llyr)
@@ -245,7 +230,7 @@ Macro "Load Counts" (MacroOpts)
     // nearest link.
     opts = null
     opts.line_dbd = scratch_dbd
-    opts.azimuth = az + 90  
+    opts.azimuth = az + 90
     opts.line_length = row_dist
     opts.midpoint = count_coord
     opts.identifier = csid
@@ -353,45 +338,54 @@ Macro "Load Counts" (MacroOpts)
   link_df.select("count_vol_lc")
   link_df.update_view(llyr, "tagged")
   
+  // Create a unique list of the types of check messages on the link layer
+  SetLayer(clyr)
+  temp = CreateObject("df")
+  v = GetDataVector(clyr + "|", "check_lc", )
+  v = temp.unique(v)
+  for type in v do
+    RunMacro("G30 create set", type)
+    qry = "Select * where check_lc = '" + type + "'"
+    SelectByQuery(type, "several", qry)
+  end
+  
+  // Clean up the map/workspace
+  SetLayer(llyr)
+  DeleteSet(nearest_link_set)
+  DeleteSet(potential_count_links)
+  DeleteSet("tagged")
+  SetLayer(clyr)
+  DeleteSet(current_count_set)
+  MaximizeWindow(GetWindowName())
+  RedrawMap(map)
   DestroyProgressBar()
+  
+  ShowMessage(
+    "Count loading finished.\n" + 
+    "Use the selection sets on the count point layer\n" +
+    "to review potential issues flagged by the process."
+  )
 EndMacro
 
 /*
-Given a count point and the array of shape points returned by
-GetLine() for the nearest line segment, return the azimuth/heading
-of the nearest 2 shape points.
-
-Inputs
-  count_point
-    Coordinate
-    Coordinate of the count point
-  
-  line_points
-    Array of coordinates returned by GetLine()
+This macro was/is used during development, but also serves as
+an example of how the "Load Count" macro can be called. 
 */
 
-Macro "Get Local Azimuth" (count_point, line_points)
-
-  // Determine the two shape points nearest to the count_point
-  a_dist = {999999999, 999999999}
-  dim a_pts[2]
-  for p = 1 to line_points.length do
-    line_point = line_points[p]
-    
-    dist = GetDistance(count_point, line_point)
-    if dist < a_dist[1] then do
-      a_dist[2] = a_dist[1]
-      a_pts[2] = a_pts[1]
-      a_dist[1] = dist
-      a_pts[1] = line_point
-    end else if dist < a_dist[2] then do
-      a_dist[2] = dist
-      a_pts[2] = line_point
-    end
-  end
+Macro "test load counts"
   
-  // Get the azimuth of the two nearest points
-  az = Azimuth(a_pts[1], a_pts[2])
+  RunMacro("Close All")
+  RunMacro("Destroy Progress Bars")
   
-  return(az)
+  dir = "C:\\count_loading"
+  opts.hwy_dbd = dir + "/Oahu Network 102907.dbd"
+  opts.count_dbd = dir + "/2005 OahuFinalCounts_mar2508.dbd"
+  opts.hwy_exclusion_query = "[AB FACTYPE] = 12"
+  // opts.max_search_dist = 
+  // opts.row_dist = 
+  opts.road_name_field = "[Road Name]"
+  opts.road_lane_fields = {"AB_LANEA", "BA_LANEA", "AB_LANEM", "BA_LANEM", "AB_LANEP", "BA_LANEP"}
+  opts.count_station_field = "ID"
+  opts.count_volume_field = "AADT"
+  RunMacro("Load Counts", opts)
 EndMacro
