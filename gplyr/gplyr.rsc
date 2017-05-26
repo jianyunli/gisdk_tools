@@ -518,6 +518,7 @@ Class "df" (tbl)
     SetView(view)
     qry = "Select * where nz(" + fields[1] + ") >= 0"
     SelectByQuery("temp", "Several", qry)
+    DeleteSet("temp")
 
     data = GetDataVectors(view + "|" + set, fields, )
     for f = 1 to fields.length do
