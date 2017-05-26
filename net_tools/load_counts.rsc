@@ -9,7 +9,7 @@ Macro "test load"
   /*opts.max_search_dist
   opts.row_dist*/
   opts.road_name_field = "[Road Name]"
-  opts.road_lane_fields = {"AB_LANEA", "BA_LANEA", "AB_LANEM", "BA_LANEM", "AB_LANEP", "BA_LANEM"}
+  opts.road_lane_fields = {"AB_LANEA", "BA_LANEA", "AB_LANEM", "BA_LANEM", "AB_LANEP", "BA_LANEP"}
   opts.count_station_field = "ID"
   opts.count_volume_field = "AADT"
   RunMacro("Load Counts", opts)
@@ -101,6 +101,7 @@ MacroOpts
 */
 
 Macro "Load Counts" (MacroOpts)
+  CreateProgressBar("Loading Counts", "True")
   
   // Extract arguments from MacroOpts
   hwy_dbd = MacroOpts.hwy_dbd
@@ -118,6 +119,13 @@ Macro "Load Counts" (MacroOpts)
   if row_dist = null then row_dist = 100
   if count_station_field = null then count_station_field = "ID"
   
+  // Make sure road_lane_fields has only unique names
+  opts = null
+  opts.Unique = "true"
+  test = SortVector(A2V(road_lane_fields), opts)
+  if test.length <> road_lane_fields.length
+    then Throw("Load Counts: 'road_lane_fields' contains duplicates")
+
   // Create a minimized map with highway and point layers
   map = RunMacro("G30 new map", hwy_dbd)
   {nlyr, llyr} = GetDBLayers(hwy_dbd)
@@ -163,9 +171,16 @@ Macro "Load Counts" (MacroOpts)
   v_cid = GetDataVector(clyr + "|", "ID", )
   v_csid = GetDataVector(clyr + "|", count_station_field, )
 
-  for c = 1 to v_cid.length do
+  /*for c = 1 to v_cid.length do*/
+  for c = 1 to 5 do
     cid = v_cid[c]
     csid = v_csid[c]
+    
+    cancelled = UpdateProgressBar(
+      "Loading count " + String(c) + " of " + String(v_cid.length),
+      round(c / v_cid.length * 100, 0)
+    )
+    if cancelled then Throw("Count Loading Cancelled")
     
     // Put the current count into its own selection set and get its coordinates
     SetLayer(clyr)
@@ -217,7 +232,7 @@ Macro "Load Counts" (MacroOpts)
       
       // Place this new link into a fresh selection set
       SetLayer(perp_llyr)
-      if ArrayPosition(GetSets(clyr), {current_perp_line_set}, ) > 0
+      if ArrayPosition(GetSets(perp_llyr), {current_perp_line_set}, ) > 0
         then DeleteSet(current_perp_line_set)
       current_perp_line_set = CreateSet("current perp line")
       SetRecord(perp_llyr, ID2RH(perp_id))
@@ -228,8 +243,9 @@ Macro "Load Counts" (MacroOpts)
       SetSelectInclusion("Intersecting")
       opts = null
       opts.[Source Not] = excluded_set
-      potential_count_links = SelectByVicinity(
-        "potential count links",
+      potential_count_links = "potential count links"
+      SelectByVicinity(
+        potential_count_links,
         "several",
         perp_llyr + "|" + current_perp_line_set,
         null
@@ -239,16 +255,78 @@ Macro "Load Counts" (MacroOpts)
       if road_name_field <> null then do
         qry = "Select * where " + 
           road_name_field + " <> '" + llyr.(road_name_field) + "'"
-        SelectByVicinity(potential_count_links, "less", qry)
+        SelectByQuery(potential_count_links, "less", qry)
       end
       
-      
-      
-      Throw()
+      // Assign the links with the count station ID
+      v_temp = GetDataVector(
+        llyr + "|" + potential_count_links,
+        "count_sid_lc",
+        null
+      )
+      v_temp = if v_temp = null then csid else v_temp
+      SetDataVector(
+        llyr + "|" + potential_count_links,
+        "count_sid_lc",
+        v_temp,
+        null        
+      )
     end
-    
-    
   end  
+  
+  // Read the count view into a data frame
+  count_df = CreateObject("df")
+  opts = null
+  opts.view = clyr
+  opts.fields = {count_station_field, count_volume_field}
+  count_df.read_view(opts)
+  count_df.rename(count_station_field, "count_sid_lc")
+  
+  // Read the links tagged with count ids into a data frame
+  SetLayer(llyr)
+  qry = "Select * where count_sid_lc <> null"
+  SelectByQuery("tagged", "several", qry)
+  link_df = CreateObject("df")
+  opts = null
+  opts.view = llyr
+  opts.set = "tagged"
+  opts.fields = {"ID", "count_sid_lc", "count_vol_lc", "check_lc"} + 
+    road_lane_fields
+  link_df.read_view(opts)
+  
+  // calculate total lanes by link (sum the lane columns)
+  for f = 1 to road_lane_fields.length do
+    field = road_lane_fields[f]
+    
+    if f = 1 then v = nz(link_df.get_vector(field))
+    else v = v + nz(link_df.get_vector(field))
+  end
+  link_df.mutate("link_lanes", v)
+  
+  // Create a table with the total lanes grouped by count id
+  lanes_by_csid = link_df.copy()
+  lanes_by_csid.group_by("count_sid_lc")
+  agg = null
+  agg.link_lanes = {"sum"}
+  lanes_by_csid.summarize(agg)
+  
+  // Join total lanes onto the link df and calculate percent lanes
+  link_df.left_join(lanes_by_csid, "count_sid_lc", "count_sid_lc")
+  link_df.left_join(count_df, "count_sid_lc", "count_sid_lc")
+  link_df.mutate(
+    "pct",
+    link_df.get_vector("link_lanes") / link_df.get_vector("sum_link_lanes")
+  )
+  link_df.mutate(
+    "count_vol_lc",
+    round(link_df.get_vector(count_volume_field) * link_df.get_vector("pct"), 0)
+  )
+  
+  // Update the link layer with count volume info
+  link_df.select("count_vol_lc")
+  link_df.update_view(llyr, "tagged")
+  
+  DestroyProgressBar()
 EndMacro
 
 /*
