@@ -409,7 +409,6 @@ Macro "Outviz Assignment Validation" (MacroOpts)
   batFile = output_dir + "tempbatch.bat"
   bat = OpenFile(batFile,"w")
   // Temporarily add the pandoc binaries to the system path
-  pandoc_dir = "C:/projects/NCSAM/Repository/Support_Files/R/bin/pandoc"
   WriteLine(bat, "set OLDPATH=%PATH%")
   WriteLine(bat,"set PATH=%PATH%;" + pandoc_dir)
   // "Rscript -e" allows you to execute R from the command line
