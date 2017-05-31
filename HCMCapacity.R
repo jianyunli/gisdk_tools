@@ -81,6 +81,16 @@ df <- df %>%
     )
   )
 
+# If a freeway link has only one lane (ramps), divide the hourly capacities
+# by two (freeway calculation assumes minimum of two lanes).
+df <- df %>%
+  mutate(
+    ABHourlyCapD = ifelse(HCMType == "Freeway" & ABLanes == 1, ABHourlyCapD / 2, ABHourlyCapD),
+    BAHourlyCapD = ifelse(HCMType == "Freeway" & BALanes == 1, BAHourlyCapD / 2, BAHourlyCapD),
+    ABHourlyCapE = ifelse(HCMType == "Freeway" & ABLanes == 1, ABHourlyCapE / 2, ABHourlyCapE),
+    BAHourlyCapE = ifelse(HCMType == "Freeway" & BALanes == 1, BAHourlyCapE / 2, BAHourlyCapE)
+  )
+
 # Write the capacities out to a CSV
 # Implement the write_bin procedure when available
 write_csv(df, paste0(output_dir, "/HourlyCapacities.csv"))
