@@ -393,11 +393,14 @@ Dbox "load counts" toolbox Title: "Count Loading Tool" location: x, y
   init do
     static x, y, init_dir, hwy_dbd, count_dbd, hwy_exclusion_query,
       road_name_field, a_hwy_fields, road_lane_index, road_lane_fields,
-      a_count_fields, count_station_field, count_volume_field
+      a_count_fields, count_station_field, count_volume_field,
+      max_search_dist, row_dist
 
     if hwy_dbd = null then hwy_dbd = "Choose Highway Line File"
     if count_dbd = null then count_dbd = "Choose Count Point File"
     if hwy_exclusion_query = null then hwy_exclusion_query = "Optional Exclusion Query"
+    if max_search_dist = null then max_search_dist = 100
+    if row_dist = null then row_dist = 200
 
     if init_dir = null then do
       ui_dbd = GetInterface()
@@ -473,6 +476,9 @@ Dbox "load counts" toolbox Title: "Count Loading Tool" location: x, y
   Popdown Menu same, after List: a_count_fields Variable: count_volume_field Editable
     Prompt: "Count Volume"
 
+  Edit Int same, after Variable: max_search_dist Prompt: "Max Search Distance (ft)"
+
+  Edit Int same, after Variable: row_dist Prompt: "ROW Distance (ft)"
 
   Button 55, 13, 12 Prompt: "Load Counts" do
 
@@ -495,8 +501,8 @@ Dbox "load counts" toolbox Title: "Count Loading Tool" location: x, y
       opts.hwy_dbd = hwy_dbd
       opts.count_dbd = count_dbd
       opts.hwy_exclusion_query = hwy_exclusion_query
-      // opts.max_search_dist =
-      // opts.row_dist =
+      opts.max_search_dist = max_search_dist
+      opts.row_dist = row_dist
       opts.road_name_field = road_name_field
       opts.road_lane_fields = road_lane_fields
       opts.count_station_field = count_station_field
