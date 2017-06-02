@@ -110,6 +110,19 @@ Macro "Load Counts" (MacroOpts)
   if test.length <> road_lane_fields.length
     then Throw("Load Counts: 'road_lane_fields' contains duplicates")
 
+  // Handle spaces in any field names. If a space is present, add brackets.
+  if Word(road_name_field, 1) <> road_name_field
+    then road_name_field = "[" + road_name_field + "]"
+  if Word(count_station_field, 1) <> count_station_field
+    then count_station_field = "[" + count_station_field + "]"
+  if Word(count_volume_field, 1) <> count_volume_field
+    then count_volume_field = "[" + count_volume_field + "]"
+  for i = 1 to road_lane_fields.length do
+    if Word(road_lane_fields[i], 1) <> road_lane_fields[i]
+      then road_lane_fields[i] = "[" + road_lane_fields[i] + "]"
+  end
+
+
   // Create a minimized map with highway and point layers
   map = RunMacro("G30 new map", hwy_dbd)
   {nlyr, llyr} = GetDBLayers(hwy_dbd)
@@ -361,12 +374,6 @@ Macro "Load Counts" (MacroOpts)
   MaximizeWindow(GetWindowName())
   RedrawMap(map)
   DestroyProgressBar()
-
-  ShowMessage(
-    "Count loading finished.\n" +
-    "Use the selection sets on the count point layer\n" +
-    "to review potential issues flagged by the process."
-  )
 EndMacro
 
 /*
@@ -374,18 +381,24 @@ This macro was/is used during development, but also serves as
 an example of how the "Load Count" macro can be called.
 */
 
-Dbox "load counts" toolbox
+Dbox "load counts" toolbox Title: "Count Loading Tool" location: x, y
 
   init do
-    hwy_dbd = "Choose Highway Line File"
-    count_dbd = "Choose Count Point File"
-    exclusion_query = "Optional Exclusion Query"
+    static x, y, init_dir, hwy_dbd, count_dbd, hwy_exclusion_query,
+      road_name_field, a_hwy_fields, road_lane_index, road_lane_fields,
+      a_count_fields, count_station_field, count_volume_field
 
-    ui_dbd = GetInterface()
-    a_path = SplitPath(ui_dbd)
-    ui_dir = a_path[1] + a_path[2]
-    ui_dir = Left(ui_dir, StringLength(ui_dir) - 1) // remove trailing \
-    init_dir = ui_dir
+    if hwy_dbd = null then hwy_dbd = "Choose Highway Line File"
+    if count_dbd = null then count_dbd = "Choose Count Point File"
+    if hwy_exclusion_query = null then hwy_exclusion_query = "Optional Exclusion Query"
+
+    if init_dir = null then do
+      ui_dbd = GetInterface()
+      a_path = SplitPath(ui_dbd)
+      ui_dir = a_path[1] + a_path[2]
+      ui_dir = Left(ui_dir, StringLength(ui_dir) - 1) // remove trailing \
+      init_dir = ui_dir
+    end
   EndItem
   Close do
     return()
@@ -395,12 +408,10 @@ Dbox "load counts" toolbox
   button after, same Prompt: "..." do
     opts = null
     opts.[Initial Directory] = init_dir
-    on notfound goto skip
+    on escape goto skip
     hwy_dbd = ChooseFile(
       {{"Geographic File", "*.dbd"}}, "Choose Highway Line File", opts
     )
-    skip:
-    on notfound default
     a_path = SplitPath(hwy_dbd)
     init_dir = a_path[1] + a_path[2]
 
@@ -409,6 +420,9 @@ Dbox "load counts" toolbox
     df = CreateObject("df")
     df.read_dbd(hwy_dbd, llyr)
     a_hwy_fields = V2A(df.colnames())
+
+    skip:
+    on notfound default
   EndItem
 
   Popdown Menu 10, 3 List: a_hwy_fields Variable: road_name_field Editable
@@ -421,39 +435,85 @@ Dbox "load counts" toolbox
     for i in road_lane_index do
       road_lane_fields = road_lane_fields + {a_hwy_fields[i]}
     end
-    Throw()
   EndItem
 
-  Text 60, 3, 30 Variable: count_dbd Prompt: "Count" Framed
+  Edit Text same, after, 30 Variable: hwy_exclusion_query Prompt: "Exlcusion"
+
+  Text 60, 1, 30 Variable: count_dbd Prompt: "Count" Framed
   button after, same Prompt: "..." do
     opts = null
     opts.[Initial Directory] = init_dir
+    on escape goto skip
     count_dbd = ChooseFile(
       {{"Geographic File", "*.dbd"}}, "Choose Count Point File", opts
     )
     a_path = SplitPath(count_dbd)
     init_dir = a_path[1] + a_path[2]
+
+    // Get field names for drop downs
+    {clyr} = GetDBLayers(count_dbd)
+    df = CreateObject("df")
+    df.read_dbd(count_dbd, clyr)
+    a_count_fields = V2A(df.colnames())
+
+    skip:
+    on notfound default
   EndItem
 
+  Popdown Menu 60, 3 List: a_count_fields Variable: count_station_field Editable
+    Prompt: "Count Station ID"
+
+  Popdown Menu same, after List: a_count_fields Variable: count_volume_field Editable
+    Prompt: "Count Volume"
 
 
-  /*Edit Text 10, 5, 30 Variable: exclusion_query Prompt: "Exlcusion"
-
-  Button 20, 7 Prompt: "Load Counts" do
+  Button 55, 12, 12 Prompt: "Load Counts" do
 
     if hwy_dbd = "Choose Highway Line File"
       then ShowMessage("Choose Highway Line File")
     else if count_dbd = "Choose Count Point File"
       then ShowMessage("Choose Count Point File")
+    else if road_name_field = null
+      then ShowMessage("Select the road name field")
+    else if road_lane_fields = null
+      then ShowMessage("Select the road lane fields")
+    else if count_station_field = null
+      then ShowMessage("Select the count station field")
+    else if count_volume_field = null
+      then ShowMessage("Select the count volume field")
     else do
-      if exclusion_query = "Optional Exclusion Query"
-        then exclusion_query = ""
+      if hwy_exclusion_query = "Optional Exclusion Query"
+        then hwy_exclusion_query = ""
+
+      opts.hwy_dbd = hwy_dbd
+      opts.count_dbd = count_dbd
+      opts.hwy_exclusion_query = hwy_exclusion_query
+      // opts.max_search_dist =
+      // opts.row_dist =
+      opts.road_name_field = road_name_field
+      opts.road_lane_fields = road_lane_fields
+      opts.count_station_field = count_station_field
+      opts.count_volume_field = count_volume_field
+      RunMacro("Load Counts", opts)
+
+      ShowMessage(
+        "Count loading finished.\n" +
+        "Use the selection sets on the count point layer\n" +
+        "to review potential issues flagged by the process."
+      )
     end
 
-  EndItem*/
+  EndItem
 
-  Button 20, 15 Prompt: "Quit" do
+  Button after, same, 12 Prompt: "Quit" do
     return()
+  EndItem
+
+  button 60, 14, 15 Prompt:"Clear Workspace" do
+    RunMacro("Close All")
+    RunMacro("Destroy Progress Bars")
+    RunMacro("Destroy Stopwatches")
+    ShowMessage("Workspace Cleared")
   EndItem
 
 EndDbox
