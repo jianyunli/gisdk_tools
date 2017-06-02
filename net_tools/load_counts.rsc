@@ -411,7 +411,7 @@ Dbox "load counts" toolbox Title: "Count Loading Tool" location: x, y
     return()
   EndItem
 
-  Text 10, 1, 30 Variable: hwy_dbd Prompt: "Highway" Framed
+  Edit Text 10, 2, 30 Variable: hwy_dbd Prompt: "Highway"
   button after, same Prompt: "..." do
     opts = null
     opts.[Initial Directory] = init_dir
@@ -432,7 +432,7 @@ Dbox "load counts" toolbox Title: "Count Loading Tool" location: x, y
     on notfound default
   EndItem
 
-  Popdown Menu 10, 3 List: a_hwy_fields Variable: road_name_field Editable
+  Popdown Menu 10, 4 List: a_hwy_fields Variable: road_name_field Editable
     Prompt: "Road Name Field"
 
   Scroll List same, after, 20, 15 List: a_hwy_fields Variable: road_lane_index Multiple
@@ -444,9 +444,9 @@ Dbox "load counts" toolbox Title: "Count Loading Tool" location: x, y
     end
   EndItem
 
-  Edit Text same, after, 30 Variable: hwy_exclusion_query Prompt: "Exlcusion"
+  Edit Text same, after, 30 Variable: hwy_exclusion_query Prompt: "Exclusion"
 
-  Text 60, 1, 30 Variable: count_dbd Prompt: "Count" Framed
+  Edit Text 60, 2, 30 Variable: count_dbd Prompt: "Count"
   button after, same Prompt: "..." do
     opts = null
     opts.[Initial Directory] = init_dir
@@ -467,14 +467,14 @@ Dbox "load counts" toolbox Title: "Count Loading Tool" location: x, y
     on notfound default
   EndItem
 
-  Popdown Menu 60, 3 List: a_count_fields Variable: count_station_field Editable
+  Popdown Menu 60, 4 List: a_count_fields Variable: count_station_field Editable
     Prompt: "Count Station ID"
 
   Popdown Menu same, after List: a_count_fields Variable: count_volume_field Editable
     Prompt: "Count Volume"
 
 
-  Button 55, 12, 12 Prompt: "Load Counts" do
+  Button 55, 13, 12 Prompt: "Load Counts" do
 
     if hwy_dbd = "Choose Highway Line File"
       then ShowMessage("Choose Highway Line File")
@@ -509,18 +509,29 @@ Dbox "load counts" toolbox Title: "Count Loading Tool" location: x, y
         "to review potential issues flagged by the process."
       )
     end
-
   EndItem
 
   Button after, same, 12 Prompt: "Quit" do
     return()
   EndItem
 
-  button 60, 14, 15 Prompt:"Clear Workspace" do
+  button 60, 15, 15 Prompt:"Clear Workspace" do
     RunMacro("Close All")
     RunMacro("Destroy Progress Bars")
     RunMacro("Destroy Stopwatches")
     ShowMessage("Workspace Cleared")
+  EndItem
+
+  // Link to GitHub
+  button 83, 0 Prompt: "User's Guide" do
+    message = "Click the link below to view the user's guide<p>"
+    message = message + "<a href='https://github.com/pbsag/gisdk_tools/wiki/Count-Loading' "
+    + "target=\"new window\">https://github.com/pbsag/gisdk_tools/wiki/Count-Loading</a>"
+
+    Opts = null
+    Opts.title = "GitHub Wiki User's Guide"
+    Opts.message = message
+    RunDbox("confirm dbox with browser", Opts)
   EndItem
 
 EndDbox
