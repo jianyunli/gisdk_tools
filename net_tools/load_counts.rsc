@@ -352,6 +352,13 @@ Macro "Load Counts" (MacroOpts)
   link_df.select("count_vol_lc")
   link_df.update_view(llyr, "tagged")
 
+  // Create a selection set of all links that have been tagged to
+  // assist in manual review.
+  SetLayer(llyr)
+  RunMacro("G30 create set", "tagged links")
+  qry = "Select * where count_sid_lc <> null"
+  SelectByQuery("tagged links", "several", qry)
+
   // Create a unique list of the types of check messages on the link layer
   // and create a selection set for each
   SetLayer(clyr)
