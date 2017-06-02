@@ -374,6 +374,90 @@ This macro was/is used during development, but also serves as
 an example of how the "Load Count" macro can be called.
 */
 
+Dbox "load counts" toolbox
+
+  init do
+    hwy_dbd = "Choose Highway Line File"
+    count_dbd = "Choose Count Point File"
+    exclusion_query = "Optional Exclusion Query"
+
+    ui_dbd = GetInterface()
+    a_path = SplitPath(ui_dbd)
+    ui_dir = a_path[1] + a_path[2]
+    ui_dir = Left(ui_dir, StringLength(ui_dir) - 1) // remove trailing \
+    init_dir = ui_dir
+  EndItem
+  Close do
+    return()
+  EndItem
+
+  Text 10, 1, 30 Variable: hwy_dbd Prompt: "Highway" Framed
+  button after, same Prompt: "..." do
+    opts = null
+    opts.[Initial Directory] = init_dir
+    on notfound goto skip
+    hwy_dbd = ChooseFile(
+      {{"Geographic File", "*.dbd"}}, "Choose Highway Line File", opts
+    )
+    skip:
+    on notfound default
+    a_path = SplitPath(hwy_dbd)
+    init_dir = a_path[1] + a_path[2]
+
+    // Get field names for drop downs
+    {nlyr, llyr} = GetDBLayers(hwy_dbd)
+    df = CreateObject("df")
+    df.read_dbd(hwy_dbd, llyr)
+    a_hwy_fields = V2A(df.colnames())
+  EndItem
+
+  Popdown Menu 10, 3 List: a_hwy_fields Variable: road_name_field Editable
+    Prompt: "Road Name Field"
+
+  Scroll List same, after, 20, 15 List: a_hwy_fields Variable: road_lane_index Multiple
+    Prompt: "Road Lane Fields" do
+
+    road_lane_fields = null
+    for i in road_lane_index do
+      road_lane_fields = road_lane_fields + {a_hwy_fields[i]}
+    end
+    Throw()
+  EndItem
+
+  Text 60, 3, 30 Variable: count_dbd Prompt: "Count" Framed
+  button after, same Prompt: "..." do
+    opts = null
+    opts.[Initial Directory] = init_dir
+    count_dbd = ChooseFile(
+      {{"Geographic File", "*.dbd"}}, "Choose Count Point File", opts
+    )
+    a_path = SplitPath(count_dbd)
+    init_dir = a_path[1] + a_path[2]
+  EndItem
+
+
+
+  /*Edit Text 10, 5, 30 Variable: exclusion_query Prompt: "Exlcusion"
+
+  Button 20, 7 Prompt: "Load Counts" do
+
+    if hwy_dbd = "Choose Highway Line File"
+      then ShowMessage("Choose Highway Line File")
+    else if count_dbd = "Choose Count Point File"
+      then ShowMessage("Choose Count Point File")
+    else do
+      if exclusion_query = "Optional Exclusion Query"
+        then exclusion_query = ""
+    end
+
+  EndItem*/
+
+  Button 20, 15 Prompt: "Quit" do
+    return()
+  EndItem
+
+EndDbox
+
 Macro "test load counts"
 
   RunMacro("Close All")
