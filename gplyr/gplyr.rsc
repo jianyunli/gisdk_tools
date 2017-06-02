@@ -81,15 +81,15 @@ Class "df" (tbl)
 
   /*
   The opposite of check_name. Returns field names with brackets removed.
-  
+
   Inputs
     field_name
       String or array of strings
       Field names to be processed
   */
-  
+
   Macro "uncheck_name" (field_name) do
-    
+
     // Argument check
     if TypeOf(field_name) = "string" then field_name = {field_name}
     if TypeOf(field_name) = "vector" then field_name = V2A(field_name)
@@ -183,34 +183,34 @@ Class "df" (tbl)
   double
   string
   */
-  
+
   Macro "coltypes" do
-  
+
     // Argument checking
     if self.is_empty() then return()
-    
+
     colnames = self.colnames()
     dim a_types[colnames.length]
     for c = 1 to colnames.length do
       colname = colnames[c]
-      
+
       v = self.get_vector(colname)
       a_types[c] = v.type
     end
-    
+
     return(a_types)
   EndItem
 
   /*
   Returns a vector of table data given a field name
   */
-  
+
   Macro "get_vector" (field_name) do
-  
+
     // Argument checking
     if self.is_empty() then return()
     if field_name = null then Throw("get_vector: 'field_name' not provided")
-    
+
     field_name = self.check_name(field_name)
     v = self.tbl.(field_name)
     return(v)
@@ -267,13 +267,13 @@ Class "df" (tbl)
   name
     String
     Field name
-    
+
   data
     Single value, array, or vector
   */
 
   Macro "mutate" (name, data) do
-  
+
     data_type = TypeOf(data)
     if data_type <> "array" and data_type <> "vector" then do
       if data_type = "int" then type = "Integer"
@@ -283,12 +283,12 @@ Class "df" (tbl)
         "mutate: 'data' type not recognized.|" +
         "Should be array, vector, int, double, or string."
         )
-      
+
       opts = null
       opts.Constant = data
       data = Vector(self.nrow(), type, opts)
     end
-  
+
     self.tbl.(name) = data
     self.check()
   EndItem
@@ -411,12 +411,12 @@ Class "df" (tbl)
       colname = colnames[c]
       coltype = coltypes[c]
       width = max(colwidths[c], 10)
-      
+
       if coltype = "short" then coltype = "Integer"
       else if coltype = "long" then coltype = "Integer"
       else if coltype = "double" then coltype = "Real"
       else if coltype = "string" then coltype = "String"
-      
+
       deci = if coltype = "Real" then 2 else 0
       a_field_info = a_field_info + {{colname, coltype, width, deci, }}
     end
@@ -424,30 +424,30 @@ Class "df" (tbl)
     // Create table
     view_name = self.unique_view_name()
     view_name = CreateTable(view_name, file, "FFB", a_field_info, )
-    
+
     // Add empty rows
     opts = null
     opts.[empty records] = self.nrow()
     AddRecords(view_name, , , opts)
-    
+
     // Fill in data
     self.update_view(view_name)
-    
+
     CloseView(view_name)
   EndItem
 
   /*
   Get column width(s)
-  
+
   Input
     field_names
       Optional string or array/vector of strings If provided, the width of the
       specified column will be returned. Otherwise, a vector of all column
       widths will be returned.
   */
-  
+
   Macro "colwidths" (field_names) do
-  
+
     // Argument check
     if field_names = null then field_names = self.colnames()
     if TypeOf(field_names) = "string" then do
@@ -455,21 +455,21 @@ Class "df" (tbl)
       was_string = "True"
     end
     if TypeOf(field_names) = "vector" then field_names = V2A(field_names)
-    
+
     dim final[field_names.length]
     for f = 1 to field_names.length do
       field_name = field_names[f]
-      
+
       v = self.get_vector(field_name)
       v = if v.type <> "string" then String(v) else v
       v = StringLength(v)
       len = ArrayMax(V2A(v))
-      
+
       final[f] = len
     end
-    
+
     final = if was_string then final[1] else A2v(final)
-    
+
     return(final)
   EndItem
 
@@ -511,7 +511,7 @@ Class "df" (tbl)
       fields = GetFields(view, )
       fields = fields[1]
     end
-    
+
     // When a view has too many rows, a "???" will appear in the editor
     // meaning that TC did not load the entire view into memory.
     // Creating a selection set will force TC to load the entire view.
@@ -525,7 +525,7 @@ Class "df" (tbl)
       field = fields[f]
       self.tbl.(field) = data[f]
     end
-    
+
     self.check()
   EndItem
 
@@ -567,6 +567,46 @@ Class "df" (tbl)
   EndItem
 
   /*
+  This is a wrapper to read_view as well, but for DBD files,
+  there can be multiple layers per file. As a result, must
+  specify which layer to read.
+
+  Inputs
+    file
+      String
+      Full path to the DBD file to read
+
+    layer
+      String
+      Layer name in the DBD to read
+
+    fields
+      Optional array of strings
+      Fields to read in (null for all fields)
+
+  Outputs
+    Array of data frames. One per layer in the DBD file.
+  */
+
+  Macro "read_dbd" (file, layer, fields) do
+    // Check file and extension
+    if GetFileInfo(file) = null
+      then Throw("read_dbd: file does not exist")
+    ext = ParseString(file, ".")
+    ext = ext[2]
+    if ext <> "dbd" then Throw("read_dbd: file not a .dbd")
+    // Check that layer name is valid
+    a_layers = GetDBLayers(file)
+    if !self.in(layer, a_layers) then Throw("read_dbd: 'layer' not in 'file'")
+
+    opts = null
+    opts.view = AddLayerToWorkspace(layer, file, layer)
+    opts.fields = fields
+    self.read_view(opts)
+    DropLayerFromWorkspace(layer)
+  EndItem
+
+  /*
   This macro takes data from a data frame and puts it into a view.  Columns are
   created if necessary. All column in the dataframe are written to the view. To
   save time, use a df.select() before calling update_view() to choose only the
@@ -601,7 +641,7 @@ Class "df" (tbl)
       a_fields =  {{field, type, 8, 2,,,, ""}}
       RunMacro("TCB Add View Fields", {view, a_fields})
     end
-    
+
     SetDataVectors(view + "|" + set, self.tbl, )
   EndItem
 
@@ -610,7 +650,7 @@ Class "df" (tbl)
   BIN files without having to open them first.
   Does not support selection sets. If working on a selection set,
   the view is already open - see update_view().
-  
+
   CSVs cannot be updated in this way - TransCAD cannot modify the
   fields or data of an opened CSV file.
   */
@@ -721,7 +761,7 @@ Class "df" (tbl)
   Avoids duplciating view names by using an odd name and adding a number based
   on views open. Check to make sure view does not already exist.
   */
-  
+
   Macro "unique_view_name" do
     view_names = GetViews()
     if view_names.length = 0 then do
@@ -738,10 +778,10 @@ Class "df" (tbl)
           else "False"
       end
     end
-    
+
     return(view_name)
   EndItem
-  
+
 
   /*
   Only used in development/debugging, an editor is a visible
@@ -752,7 +792,7 @@ Class "df" (tbl)
   to stop the code and allow you to view the table.  This also
   prevents it from ever being used in production code, and it never
   should be.
-  
+
   Inputs
     other_dfs
       Optional array of other df objects
@@ -765,22 +805,22 @@ Class "df" (tbl)
 
     // If other dfs are provided
     if other_dfs <> null then do
-    
+
       if TypeOf(other_dfs) <> "array" then other_dfs = {other_dfs}
-    
+
       for i = 1 to other_dfs.length do
         df = other_dfs[i]
         if TypeOf(df) <> "object" then Throw(
-          "create_editor: 'other_dfs' does not have a df in position " + 
+          "create_editor: 'other_dfs' does not have a df in position " +
           String(i)
         )
         df.check()
-        
+
         {view_name, file_name} = df.create_view()
         CreateEditor("data frame", view_name + "|", , )
       end
     end
-    
+
     Throw("Editor created to view\ndata frame contents")
   EndItem
 
@@ -986,7 +1026,7 @@ Class "df" (tbl)
         self.rename(current_field, new_field)
       end
     end
-    
+
     // Check if "Count" field should be removed. If "count" is present in any
     // of the field stats, then keep it.
     remove_count = "True"
@@ -1576,7 +1616,7 @@ endClass
 /*
 Unit test macro
 Runs through all the methods and writes out results. To use this macro, either:
-preferred: clone gisdk_tools to the "dir" listed below on your machine or 
+preferred: clone gisdk_tools to the "dir" listed below on your machine or
 alternative: change the dir variable, but do not commit the change.
 */
 Macro "test gplyr"
@@ -1644,8 +1684,8 @@ Macro "test gplyr"
   answer = {"Size", "Color", "Count", "Length"}
   for a = 1 to names.length do
     if names[a] <> answer[a] then Throw("test: colnames failed")
-  end  
-  
+  end
+
   // test coltypes
   df = CreateObject("df")
   df.read_csv(csv_file)
@@ -1653,8 +1693,8 @@ Macro "test gplyr"
   answer = {"string", "string", "long", "long"}
   for a = 1 to answer.length do
     if types[a] <> answer[a] then Throw("test: coltypes failed")
-  end  
-  
+  end
+
   // test colwidths
   df = CreateObject("df")
   df.read_csv(csv_file)
@@ -1662,8 +1702,8 @@ Macro "test gplyr"
   answer = {6, 6, 3, 1}
   for a = 1 to answer.length do
     if widths[a] <> answer[a] then Throw("test: colwidths failed")
-  end  
-  
+  end
+
   // test read_csv and read_bin (which test read_view)
   df = CreateObject("df")
   df.read_csv(csv_file)
@@ -1852,7 +1892,7 @@ Macro "test gplyr"
   for a = 1 to answer.length do
     if df.tbl.bin[a] <> answer[a] then Throw("test: bin_field() failed")
   end
-  
+
   // test update_bin (which also tests update_view)
   temp_bin_file = GetTempFileName(".bin")
   CopyTableFiles(, "FFB", bin_file, , temp_bin_file, )
@@ -1865,7 +1905,7 @@ Macro "test gplyr"
   for a = 1 to answer.length do
     if df.tbl.test_col[a] <> answer[a] then Throw("test: update_bin() failed")
   end
-  
+
 
   ShowMessage("Passed Tests")
 EndMacro
