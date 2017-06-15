@@ -60,6 +60,11 @@ Macro "Road Project Management" (MacroOpts)
   proj_list = MacroOpts.proj_list
   master_dbd = MacroOpts.master_dbd
 
+  // Argument check
+  if hwy_dbd = null then Throw("'hwy_dbd' not provided")
+  if proj_list = null then Throw("'proj_list' not provided")
+  if master_dbd = null then Throw("'master_dbd' not provided")
+
   // Get vector of project IDs from the project list file
   csv_tbl = OpenTable("tbl", "CSV", {proj_list, })
   v_projIDs = GetDataVector(csv_tbl + "|", "ProjID", )
