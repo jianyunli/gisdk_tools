@@ -712,6 +712,14 @@ a_initial_values
 
 Macro "Add Fields" (view, a_fields, a_initial_values)
 
+  // Argument check
+  if view = null then Throw("'view' not provided")
+  if a_fields = null then Throw("'a_fields' not provided")
+  if a_initial_values <> null then do
+    if TypeOf(a_initial_values) <> "array"
+      then Throw("'a_initial_values' must be an array")
+  end
+
   // Get current structure and preserve current fields by adding
   // current name to 12th array position
   a_str = GetTableStructure(view)
