@@ -209,7 +209,7 @@ Macro "Read Parameter File" (parameterFile, incDescr)
     null_path = "false"
     for d = 1 to dimensions do
       partial_path = a_dVecs[d][i]
-      
+
       if partial_path = null then null_path = "true"
       a_path = a_path + {partial_path}
     end
@@ -473,7 +473,7 @@ Macro "Clear Directory" (dir)
   cmd = "cmd /C rmdir /s /q " + dir
   opts.Minimize = "True"
   RunProgram(cmd, opts)
-  
+
   cmd = "cmd /C mkdir " + dir
   opts.Minimize = "True"
   RunProgram(cmd, opts)
@@ -702,7 +702,7 @@ a_fields
   Each sub-array contains the 12-elements that describe a field.
   e.g. {"Density", "Real", 10, 3,,,,"Used to calculate initial AT"}
   (See ModifyTable() TC help page for full array info)
-  
+
 a_initial_values
   Array (optional)
   If provided, the field will be set to this value. This can be used to ensure
@@ -747,7 +747,7 @@ Macro "Add Fields" (view, a_fields, a_initial_values)
   end
 
   ModifyTable(view, a_str)
-  
+
   // Set initial field values if provided
   if a_initial_values <> null then do
     length = GetRecordCount(view, )
@@ -755,9 +755,9 @@ Macro "Add Fields" (view, a_fields, a_initial_values)
       field = a_fields[f][1]
       type = a_fields[f][2]
       init_value = a_initial_values[f]
-      
+
       if type = "Character" then type = "String"
-      
+
       opts = null
       opts.Constant = init_value
       v = Vector(length, type)
@@ -899,7 +899,7 @@ MacroOpts
     ...
 
     Simply have the equiv table look like this:
-    
+
     to_field  from_field  ...
     HBO       HBS
 
@@ -928,7 +928,7 @@ Macro "Field Crosswalk" (MacroOpts)
   // Open tables
   equiv_tbl = OpenTable("param", "CSV", {equiv_tbl})
   tbl = OpenTable("se", "FFB", {tbl})
-  
+
   // Only work with equiv_tbl rows that aren't null
   SetView(equiv_tbl)
   qry = "Select * where from_field <> null"
@@ -1041,7 +1041,7 @@ Macro "Matrix Crosswalk" (MacroOpts)
     to_core = v_to_core[c]
     from_core = v_from_core[c]
     factor = v_from_fac[c]
-    
+
     // Check that the from_core was found.
     if a_from_curs.(from_core) = null
       then Throw(
