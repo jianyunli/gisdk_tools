@@ -110,7 +110,7 @@ Macro "Transit Project Management" (MacroOpts)
   a_fields = {
     {"Node_ID", "Integer", 10,,,,,"Scenario network node id"}
   }
-  RunMacro("Add Fields", slyr, a_fields, 0)
+  RunMacro("Add Fields", slyr, a_fields, {0})
 
   // Select the nearest scenario node features to the RTS stop features,
   // putting the ids into the Node_ID field.
@@ -121,7 +121,7 @@ Macro "Transit Project Management" (MacroOpts)
   SetLayer(nlyr)
   nearest_node_set = "nearest nodes"
   n = SelectNearestFeatures(
-    neares_node_set, "several", slyr + "|" + route_set, threshold,
+    nearest_node_set, "several", slyr + "|" + route_set, threshold,
   )
   v_scen_node_ids = GetDataVector(nlyr + "|" + nearest_node_set, "ID", )
   SetDataVector(slyr + "|" + route_set, "Node_ID", v_scen_node_ids, )
