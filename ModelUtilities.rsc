@@ -1128,3 +1128,25 @@ EndMacro
 Macro "Resolve Path" (rel_path)
   Throw("Macro 'Resolve Path' has been renamed to 'Normalize Path'")
 EndMacro
+
+/*
+Takes a query string and makes sure it is of the form:
+"Select * where ...""
+
+Inputs
+  query
+    String
+    A query. Can be "Select * where ID = 1" or just the "ID = 1"
+
+Returns
+  A query of the form "Select * where ..."
+*/
+
+Macro "Normalize Query" (query)
+
+  if query = null then Throw("Normalize Query: 'query' not provided")
+
+  if Left(query, 15) = "Select * where "
+    then return(query)
+    else return("Select * where " + query)
+EndMacro
