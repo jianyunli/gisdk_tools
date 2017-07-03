@@ -1055,7 +1055,7 @@ Macro "Matrix Crosswalk" (MacroOpts)
     to_cur = CreateMatrixCurrency(to_mtx, to_core, to_ri, to_ci, )
 
     // Calculate the new core
-    to_cur := nz(to_cur) + a_from_curs.(from_core) * factor
+    to_cur := nz(to_cur) + nz(a_from_curs.(from_core)) * factor
 
   end
 EndMacro
