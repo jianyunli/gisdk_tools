@@ -21,13 +21,14 @@ Run the create-from-table batch macro.
 
 Macro "test"
 
-  RunMacro("Close All")
   model_dir = "Y:\\projects/OahuMPO/Repo"
   scen_dir = model_dir + "/scenarios/test"
   opts = null
   opts.master_rts = model_dir + "/generic/inputs/master_network/Oahu Route System 102907.rts"
   opts.scen_hwy = scen_dir + "/inputs/network/Scenario Line Layer.dbd"
   opts.proj_list = scen_dir + "/TransitProjectList.csv"
+  opts.centroid_qry = "[Zone Centroid] = 'Y'"
+  opts.output_rts_file = "Scenario Route System.rts"
   RunMacro("Transit Project Management", opts)
 EndMacro
 
@@ -46,9 +47,22 @@ Inputs
       String
       Full path to the scenario highway dbd that should have the routes loaded
 
+    centroid_qry
+      String
+      Query that defines centroids in the node layer. Centroids will be prevented
+      from having stops tagged to them. Routes will also be prevented from
+      traveleing through them.
+
     proj_list
       String
       Full path to the CSV file containing the list of routes to include
+
+    output_rts_file
+      Optional String
+      The file name desired for the output route system.
+      Defaults to "ScenarioRoutes.rts".
+      Do not include the full path. The route system will always be created
+      in the same folder as the scenario highway file.
 
 Outputs
   Creates a new RTS file in the same folder as scen_hwy
@@ -56,13 +70,27 @@ Outputs
 
 Macro "Transit Project Management" (MacroOpts)
 
+  // To prevent potential problems with view names, open files, etc.
+  // close everything before starting.
+  RunMacro("Close All")
+
   // Argument extraction and checking
   master_rts = MacroOpts.master_rts
   scen_hwy = MacroOpts.scen_hwy
   proj_list = MacroOpts.proj_list
+  centroid_qry = MacroOpts.centroid_qry
+  output_rts_file = MacroOpts.output_rts_file
   if master_rts = null then Throw("'master_rts' not provided")
   if scen_hwy = null then Throw("'scen_hwy' not provided")
   if proj_list = null then Throw("'proj_list' not provided")
+  if centroid_qry = null then Throw("'centroid_qry' not provided")
+  centroid_qry = RunMacro("Normalize Query", centroid_qry)
+  if output_rts_file = null then output_rts_file = "ScenarioRoutes.rts"
+
+  // Set the output directory to be the same as the scenario highway
+  a_path = SplitPath(scen_hwy)
+  out_dir = a_path[1] + a_path[2]
+  out_dir = RunMacro("Normalize Path", out_dir)
 
   // Convert project IDs into route IDs
   proj_df = CreateObject("df")
@@ -106,32 +134,131 @@ Macro "Transit Project Management" (MacroOpts)
     SelectByQuery(route_set, operation, qry)
   end
 
-  // Add a field called Node_ID
+  // Add stop layer fields called Node_ID and missing_node
   a_fields = {
-    {"Node_ID", "Integer", 10,,,,,"Scenario network node id"}
+    {"Node_ID", "Integer", 10,,,,,"Scenario network node id"},
+    {"missing_node", "Integer", 10,,,,,
+    "1: a stop in the master rts could not find a nearby node"}
   }
-  RunMacro("Add Fields", slyr, a_fields, {0})
+  RunMacro("Add Fields", slyr, a_fields, {0, 0})
 
-  // Select the nearest scenario node features to the RTS stop features,
-  // putting the ids into the Node_ID field.
+  // Setup the search threshold for SelectNearestFeatures
   units = GetMapUnits("Plural")
   threshold = if (units = "Miles") then 100 / 5280
     else if (units = "Feet") then 100
   if threshold = null then Throw("Map units must be feet or miles")
+
+  // Create a selection set of centroids on the node layer
   SetLayer(nlyr)
-  nearest_node_set = "nearest nodes"
-  n = SelectNearestFeatures(
-    nearest_node_set, "several", slyr + "|" + route_set, threshold,
-  )
-  v_scen_node_ids = GetDataVector(nlyr + "|" + nearest_node_set, "ID", )
-  SetDataVector(slyr + "|" + route_set, "Node_ID", v_scen_node_ids, )
-Throw()
+  num_centroids = SelectByQuery("centroids", "several", centroid_qry)
+
+  // Loop over each stop in the table and find the nearest scenario node ID
+  rh = GetFirstRecord(slyr + "|" + route_set, )
+  while rh <> null do
+
+    // Create a stop set to hold the current record
+    SetRecord(slyr, rh)
+    SetLayer(slyr)
+    current_stop_set = "current stop"
+    CreateSet(current_stop_set)
+    SelectRecord(current_stop_set)
+
+    // Locate the nearest node in the node layer to the current stop. Exclude
+    // centroids from being nearest features.
+    SetLayer(nlyr)
+    nearest_node_set = "nearest nodes"
+    opts = null
+    opts.[Source Not] = "centroids"
+    n = SelectNearestFeatures(
+      nearest_node_set, "several", slyr + "|" + current_stop_set,
+      threshold, opts
+    )
+    if n = 0 then slyr.missing_node = 1
+    else do
+      n_id = GetSetIDs(nlyr + "|" + nearest_node_set)
+      n_id = n_id[1]
+      slyr.Node_ID = n_id
+    end
+
+    SetLayer(slyr)
+    UnselectRecord(current_stop_set)
+    rh = GetNextRecord(slyr + "|" + route_set, , )
+  end
+
   // Read in the selected records to a data frame
   stop_df = CreateObject("df")
   opts = null
   opts.view = slyr
-  opts.set = "proj_routes"
+  opts.set = route_set
   stop_df.read_view(opts)
 
+  // Create a table with the proper format to be read by TC's
+  // create-route-from-table method. In TC6 help, this is called
+  // "Creating a Route System from a Tour Table", and is in the drop down
+  // menu Route Systems -> Utilities -> Create from table...
+  // Fields:
+  // Route_Number
+  // Node_ID
+  // Stop_Flag
+  // Stop_ID
+  // Stop_Name
+  create_df = stop_df.copy()
+  create_df.rename(
+    {"Route_ID", "STOP_FLAG", "STOP_ID", "Stop Name"},
+    {"Route_Number", "Stop_Flag", "Stop_ID", "Stop_Name"}
+  )
+  create_df.filter("missing_node <> 1")
+  create_df.select(
+    {"Route_Number", "Node_ID", "Stop_Flag", "Stop_ID", "Stop_Name"}
+  )
+  tour_table = out_dir + "/create_rts_from_table.bin"
+  create_df.write_bin(tour_table)
 
+  // Create a simple network of the scenario highway layer
+  SetLayer(llyr)
+  set_name = null
+  net_file = out_dir + "/create_rts_from_table.net"
+  label = "Net used to import RTS"
+  link_fields = {{"Length", {llyr + ".Length", llyr + ".Length", , , "False"}}}
+  node_fields = null
+  opts = null
+  opts.[Time Units] = "Minutes"
+  opts.[Length Units] = "Miles"
+  opts.[Link ID] = llyr + ".ID"
+  opts.[Node ID] = nlyr + ".ID"
+  opts.[Turn Penalties] = "Yes"
+  nh = CreateNetwork(set_name, net_file, label, link_fields, node_fields, opts)
+
+  // Add centroids to the network to prevent routes from passing through
+  // Network Settings
+  Opts = null
+  Opts.Input.Database = scen_hwy
+  Opts.Input.Network = net_file
+  Opts.Input.[Centroids Set] = {
+    scen_hwy + "|" + nlyr, nlyr,
+    "centroids", centroid_qry
+  }
+  ok = RunMacro("TCB Run Operation", "Highway Network Setting", Opts, &Ret)
+  if !ok then Throw(
+    "Transit Project Management: Network settings failed"
+  )
+
+  // Call TransCAD macro for importing a route system from a stop table.
+  Opts = null
+  Opts.Input.Network = net_file
+  Opts.Input.[Link Set] = {scen_hwy + "|" + llyr, llyr}
+  Opts.Input.[Tour Table] = {tour_table}
+  Opts.Global.[Cost Field] = 1
+  Opts.Global.[Route ID Field] = 1
+  Opts.Global.[Node ID Field] = 2
+  Opts.Global.[Include Stop] = 1
+  Opts.Global.[RS Layers].RouteLayer = rlyr
+  Opts.Global.[RS Layers].StopLayer = slyr
+  Opts.Global.[Stop Flag Field] = 3
+  Opts.Global.[User ID Field] = 2
+  Opts.Output.[Output Routes] = out_dir + "/" + output_rts_file
+  ret_value = RunMacro("TCB Run Operation", "Create RS From Table", Opts, &Ret)
+  if !ret_value then Throw("Create RS From Table failed")
+
+  RunMacro("Close All")
 EndMacro
