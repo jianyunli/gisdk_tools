@@ -1099,9 +1099,11 @@ and turns it into this:
 C:\\projects\\other_model
 
 Works whether using "\\" or "/" for directory markers
+
+Also removes any trailing slashes
 */
 
-Macro "Resolve Path" (rel_path)
+Macro "Normalize Path" (rel_path)
 
   a_parts = ParseString(rel_path, "/\\")
   for i = 1 to a_parts.length do
@@ -1121,4 +1123,8 @@ Macro "Resolve Path" (rel_path)
   end
 
   return(path)
+EndMacro
+
+Macro "Resolve Path" (rel_path)
+  Throw("Macro 'Resolve Path' has been renamed to 'Normalize Path'")
 EndMacro
