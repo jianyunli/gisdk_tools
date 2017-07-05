@@ -93,6 +93,11 @@ MacroOpts
     String
     Path of the se table
 
+  skim_file
+    String
+    Path to the skim mtx file
+    Must include core names referenced by param_file and template_dcm
+
   output_dir
     String
     Path of the folder to place output
@@ -105,10 +110,18 @@ MacroOpts
     String
     Path to the template dcm file
 
-  skim_file
-    String
-    Path to the skim mtx file
-    Must include core names referenced by param_file and template_dcm
+  se_set_name
+    Optional String
+    If running DC on a subset of zones, use this to state the name of the
+    selection set. Must match what is listed in the template_dcm. If provided,
+    both se_set_name and se_set_query are required.
+
+  se_set_query
+    Optional String
+    If running DC on a subset of zones, use this to define the selection set.
+    e.g. "InternalZone = 'Internal'" or "ID < 2000". If provided,
+    both se_set_name and se_set_query are required.
+
 
 Depends
   ModelUtilities.rsc
@@ -124,6 +137,22 @@ Macro "Destination Choice" (MacroOpts)
   param_file = MacroOpts.param_file
   template_dcm = MacroOpts.template_dcm
   skim_file = MacroOpts.skim_file
+  se_set_name = MacroOpts.se_set_name
+  se_set_query = MacroOpts.se_set_query
+
+  // Argument checks
+  if period = null then Throw("'period' not provided")
+  if se_bin = null then Throw("'se_bin' not provided")
+  if output_dir = null then Throw("'output_dir' not provided")
+  if param_file = null then Throw("'param_file' not provided")
+  if template_dcm = null then Throw("'template_dcm' not provided")
+  if skim_file = null then Throw("'skim_file' not provided")
+  if se_set_name <> null and se_set_query = null
+    then Throw("'se_set_name' and 'se_set_query' must both be provided.")
+  if se_set_name = null and se_set_query <> null
+    then Throw("'se_set_name' and 'se_set_query' must both be provided.")
+  if se_set_query <> null
+    then se_set_query = RunMacro("Normalize Query", se_set_query)
 
   // Read in the dc parameter file
   dc_params = RunMacro("Read Parameter File", param_file)
@@ -159,7 +188,7 @@ Macro "Destination Choice" (MacroOpts)
     SetDataVector(se_tbl + "|", "shadow_price", v_sp, )
     CloseView(se_tbl)
 
-    // Calculate required DC based on capped distance
+    // Calculate a capped distance cores required by DC
     RunMacro("Calc DC Matrix Cores", params.dist_cap, skim_file, period)
 
     // Create a copy of the template dcm file and update its
@@ -204,7 +233,7 @@ Macro "Destination Choice" (MacroOpts)
       Opts.Flag.Aggregate = 1
       Opts.Flag.[Destination Choice] = 1
       Opts.Input.[skim_mtx Matrix] = skim_file
-      Opts.Input.[zone_tbl Set] = {se_bin, "ScenarioSE"}
+      Opts.Input.[zone_tbl Set] = {se_bin, "ScenarioSE", se_set_name, se_set_query}
       // Probability matrix
       file_name = "probabilities_" + purp + "_" + period + ".MTX"
       file_path = output_dir + "/" + file_name
@@ -228,7 +257,19 @@ Macro "Destination Choice" (MacroOpts)
       Opts.Output.[Utility Matrix].[File Name] = file_path
 
       ret_value = RunMacro("TCB Run Procedure", "NestedLogitEngine", Opts, &Ret)
-      if !ret_value then Throw("Destination choice model failed")
+      if !ret_value then do
+        error = Ret[1][1]
+        if Left(error, 17) = "Cannot create key" then do
+        err_parts = SplitString(error)
+        proper_set_name = err_parts[2]
+          Throw(
+            "The selection set named used in the script ('" + se_set_name + "')\n" +
+            "does not match the one used during the template (.dcm) creation\n" +
+            "('" + proper_set_name + "')"
+          )
+        end else Throw("Destination choice model failed")
+
+      end
 
       // Export column marginals to table
       m = OpenMatrix(trip_path,)
