@@ -305,6 +305,42 @@ Macro "Destination Choice" (MacroOpts)
       // Require the min_iters be performed
       if dc_iter < min_iters then pct_rmse = 100
       dc_iter = dc_iter + 1
+
+      // To simplify project code using this macro, never let the final trip matrix
+      // have fewer rows/columns than all centroids. Thus, if a selection set was
+      // applied, expand the matrix. The new rows/columns will be null.
+      if se_set_name <> null then do
+
+        // Copy the skim matrix structure to a temp file
+        skim_mtx = OpenMatrix(skim_file, )
+        a_skim_mcs = CreateMatrixCurrencies(skim_mtx, , , )
+        temp_file = output_dir + "/temp.mtx"
+        opts = null
+        opts.[File Name] = temp_file
+        opts.Label = purp + " " + period + " Trips"
+        opts.Type = "Float"
+        opts.Tables = {a_skim_mcs[1][1]}
+        CopyMatrixStructure({a_skim_mcs[1][2]}, opts)
+
+        // Transfer data
+        trip_mtx = OpenMatrix(trip_path, )
+        a_trip_mcs = CreateMatrixCurrencies(trip_mtx, , , )
+        temp_mtx = OpenMatrix(temp_file, )
+        a_temp_mcs = CreateMatrixCurrencies(temp_mtx, , , )
+        a_temp_mcs[1][2] := 0
+        MergeMatrixElements(a_temp_mcs[1][2], {a_trip_mcs[1][2]}, , , )
+        SetMatrixCoreName(temp_mtx, a_skim_mcs[1][1], "Total")
+
+        // Clean up workspace and replace dc output matrix with temp
+        skim_mtx = null
+        a_skim_mcs = null
+        a_trip_mcs = null
+        trip_mtx = null
+        temp_mtx = null
+        a_temp_mcs = null
+        DeleteFile(trip_path)
+        RenameFile(temp_file, trip_file)
+      end
     end
   end
 
