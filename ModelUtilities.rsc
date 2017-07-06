@@ -1000,7 +1000,12 @@ MacroOpts
   to_mtx
     String
     Full path to matrix file where cores will be added
-    If it does not exist, it will be created.
+    Always creates a new matrix (deletes to_mtx if it exists).
+
+  to_mtx_label
+    Optional String
+    Name/Label to assign to to_mtx. By default, uses
+    "Created by Matrix Crosswalk"
 
   equiv_tbl
     String
@@ -1012,6 +1017,12 @@ Macro "Matrix Crosswalk" (MacroOpts)
   from_mtx = MacroOpts.from_mtx
   to_mtx = MacroOpts.to_mtx
   equiv_tbl = MacroOpts.equiv_tbl
+  to_mtx_label = MacroOpts.to_mtx_label
+
+  if from_mtx = null then Throw("'from_mtx' not provided")
+  if to_mtx = null then Throw("'to_mtx' not provided")
+  if equiv_tbl = null then Throw("'equiv_tbl' not provided")
+  if to_mtx_label = null then to_mtx_label = "Created by Matrix Crosswalk"
 
   // Open the equiv_tbl
   // Get from-core, to-core, and factor
@@ -1031,7 +1042,7 @@ Macro "Matrix Crosswalk" (MacroOpts)
   if GetFileInfo(to_mtx) <> null then DeleteFile(to_mtx)
   opts = null
   opts.[File Name] = to_mtx
-  opts.Label = "Created by Matrix Crosswalk"
+  opts.Label = to_mtx_label
   opts.Tables = {v_to_core[1]}
   to_mtx = CopyMatrixStructure({a_from_curs.(v_from_core[1])}, opts)
   {to_ri, to_ci} = GetMatrixIndex(to_mtx)
