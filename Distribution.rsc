@@ -322,6 +322,7 @@ Macro "Destination Choice" (MacroOpts)
         opts.Tables = {a_skim_mcs[1][1]}
         CopyMatrixStructure({a_skim_mcs[1][2]}, opts)
 
+
         // Transfer data
         trip_mtx = OpenMatrix(trip_path, )
         a_trip_mcs = CreateMatrixCurrencies(trip_mtx, , , )
@@ -330,6 +331,12 @@ Macro "Destination Choice" (MacroOpts)
         a_temp_mcs[1][2] := 0
         MergeMatrixElements(a_temp_mcs[1][2], {a_trip_mcs[1][2]}, , , )
         SetMatrixCoreName(temp_mtx, a_skim_mcs[1][1], "Total")
+
+        // Change the row/col index to match
+        {ri, ci} = GetMatrixIndex(trip_mtx)
+        {temp_ri, temp_ci} = GetMatrixIndex(temp_mtx)
+        SetMatrixIndexName(temp_mtx, temp_ri, ri)
+        SetMatrixIndexName(temp_mtx, temp_ci, ci)
 
         // Clean up workspace and replace dc output matrix with temp
         skim_mtx = null
