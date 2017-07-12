@@ -416,6 +416,35 @@ Macro "Catalog Files" (dir, ext)
 EndMacro
 
 /*
+Simple wrapper to "Catalog Files" that writes out the full path to
+every file in given directory (and it's subdirectories) to a csv.
+This is usually run manually in the GISDK toolbar. Write a temporary
+macro that sets the value of "dir" and calls this macro like so:
+
+Macro "test"
+  dir  = "C:\\folder1\\folder2"
+  RunMacro("List Files in CSV", dir)
+  ShowMessage("Done")
+End
+
+Return
+  Writes a CSV file listing all files in "dir"
+*/
+
+Macro "List Files in CSV" (dir)
+
+  dir = RunMacro("Normalize Path", dir)
+
+  a_files = RunMacro("Catalog Files", dir)
+  file = dir + "/list_of_files.csv"
+  file = OpenFile(file, "w")
+  for f = 1 to a_files.length do
+    WriteLine(file, a_files[f])
+  end
+  CloseFile(file)
+EndMacro
+
+/*
 Uses the batch shell to copy the folders and subfolders from
 one directory to another.
 
