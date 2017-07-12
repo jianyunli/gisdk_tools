@@ -246,7 +246,7 @@ Macro "Destination Choice" (MacroOpts)
       trip_path = output_dir + "/" + trip_file
       Opts.Output.[Applied Totals Matrix].Label = purp + " " + period + " Trips"
       Opts.Output.[Applied Totals Matrix].Compression = 1
-      Opts.Output.[Applied Totals Matrix].FileName = file_name
+      Opts.Output.[Applied Totals Matrix].FileName = trip_file
       Opts.Output.[Applied Totals Matrix].[File Name] = trip_path
       // Utility matrix
       file_name = "utilities_" + purp + "_" + period + ".MTX"
