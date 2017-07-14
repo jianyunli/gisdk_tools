@@ -795,7 +795,7 @@ Class "df" (tbl)
 
   Inputs
     other_dfs
-      Optional array of other df objects
+      Optional df object or array of df objects
       If provided, these data frames will also be displayed in editors
   */
 
@@ -1097,77 +1097,57 @@ Class "df" (tbl)
     if m_id.length <> s_id.length then
       Throw("left_join: 'm_id' and 's_id' are not the same length")
 
-    // Create dup_fields
-    // an array of fields that will be duplicated
-    // after the join (that aren't in m_id or s_id)
-    m_fields = V2A(self.colnames())
-    m_result = CopyArray(m_fields)
-    s_fields = V2A(slave_tbl.colnames())
-    s_result = CopyArray(s_fields)
-    for i = 1 to m_id.length do
-      m = m_id[i]
-      s = s_id[i]
-
-      pos = ArrayPosition(m_result, {m}, )
-      m_result = ExcludeArrayElements(m_result, pos, 1)
-      pos = ArrayPosition(s_result, {s}, )
-      s_result = ExcludeArrayElements(s_result, pos, 1)
+    // To avoid duplication of field names. Add "x" to all master fields and
+    // add "y" to all slave fields.
+    v_colnames = self.colnames()
+    for c in v_colnames do
+      self.rename(c, c + "_x")
     end
-    if m_result.length > 0 then do
-      for i = 1 to m_result.length do
-        field = m_result[i]
-
-        if self.in(field, s_result) then dup_fields = dup_fields + {field}
-      end
+    v_colnames = slave_tbl.colnames()
+    for c in v_colnames do
+      slave_tbl.rename(c, c + "_y")
     end
+    // Do the same for m_id and s_id arrays
+    m_id = V2A(A2V(m_id) + "_x")
+    s_id = V2A(A2V(s_id) + "_y")
 
+    // Create views of both tables
     {master_view, master_file} = self.create_view()
     {slave_view, slave_file} = slave_tbl.create_view()
 
-    dim m_spec[m_id.length]
-    dim s_spec[s_id.length]
-    for i = 1 to m_id.length do
-      m_spec[i] = master_view + "." + m_id[i]
-      s_spec[i] = slave_view + "." + s_id[i]
-    end
+    // Create field specs for master and slave fields
+    m_spec = V2A(master_view + "." + A2V(m_id))
+    s_spec = V2A(slave_view + "." + A2V(s_id))
 
+    // Join views together
     jv = JoinViewsMulti("jv", m_spec, s_spec, )
     self.tbl = null
     opts = null
     opts.view = jv
     self.read_view(opts)
 
-    // JoinViewsMulti() will attach the view names to the m_id and s_id fields
-    // if they are the same.
-    // Remove the s_id fields, and clean the m_id fields (if needed)
-    for i = 1 to m_id.length do
-      m = m_id[i]
-      s = s_id[i]
-
-      if m = s then do
-        // Rename master field
-        current_name = master_view + "." + m
-        self.rename(current_name, m)
-        // Delete slave field
-        self.tbl.(slave_view + "." + s) = null
-      end else do
-        // Delete slave field
-        self.tbl.(s) = null
-      end
+    // Remove slave fields
+    for sf in s_id do
+      self.remove(sf)
     end
 
-    // Handle any other duplicate fields.
-    // Replace the default name with a .x and .y suffix.
-    for d = 1 to dup_fields.length do
-      field = dup_fields[d]
+    // For the remaining fields, remove the "_x" or "_y" unless there are
+    // duplicates.
+    v_colnames = self.colnames()
+    v_rawnames = Left(v_colnames, StringLength(v_colnames) - 2)
+    for c = 1 to v_colnames.length do
+      colname = v_colnames[c]
+      rawname = v_rawnames[c]
 
-      current_name = master_view + "." + field
-      new_name = field + ".x"
-      self.rename(current_name, new_name)
-      current_name = slave_view + "." + field
-      new_name = field + ".y"
-      self.rename(current_name, new_name)
+      // Create an array of raw field names without the current name. If the
+      // current raw name is still found in this array, it means the field is
+      // duplicated.
+      a_search = ExcludeArrayElements(V2A(a_rawnames), c, 1)
+      pos = ArrayPosition(a_search, {rawname}, )
+      if pos = 0 then self.rename(colname, rawname)
     end
+
+    self.create_editor()
 
     // Clean up the workspace
     CloseView(jv)
