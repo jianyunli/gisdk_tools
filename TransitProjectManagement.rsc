@@ -21,6 +21,8 @@ Run the create-from-table batch macro.
 
 Macro "test"
 
+  RunMacro("Close All")
+
   model_dir = "Y:\\projects/OahuMPO/Repo"
   scen_dir = model_dir + "/scenarios/test"
   opts = null
@@ -30,6 +32,18 @@ Macro "test"
   opts.centroid_qry = "[Zone Centroid] = 'Y'"
   opts.output_rts_file = "Scenario Route System.rts"
   RunMacro("Transit Project Management", opts)
+
+
+  /*hwy_dbd = scen_dir + "/inputs/network/Scenario Line Layer.dbd"
+  {nlyr, llyr} = GetDBLayers(hwy_dbd)
+  //map = RunMacro("G30 new map", hwy_dbd)
+  AddLayerToWorkspace(llyr, hwy_dbd, llyr)
+  opts = null
+  //opts.llyr = llyr
+  opts.hwy_dbd = hwy_dbd
+  opts.centroid_qry = "[Zone Centroid] = 'Y'"
+  {nh, net_file} = RunMacro("Create Simple Highway Net", opts)*/
+  ShowMessage("Done")
 EndMacro
 
 /*
@@ -74,12 +88,14 @@ Macro "Transit Project Management" (MacroOpts)
   // close everything before starting.
   RunMacro("Close All")
 
-  // Argument extraction and checking
+  // Argument extraction
   master_rts = MacroOpts.master_rts
   scen_hwy = MacroOpts.scen_hwy
   proj_list = MacroOpts.proj_list
   centroid_qry = MacroOpts.centroid_qry
   output_rts_file = MacroOpts.output_rts_file
+
+  // Argument checking
   if master_rts = null then Throw("'master_rts' not provided")
   if scen_hwy = null then Throw("'scen_hwy' not provided")
   if proj_list = null then Throw("'proj_list' not provided")
@@ -92,11 +108,19 @@ Macro "Transit Project Management" (MacroOpts)
   out_dir = a_path[1] + a_path[2]
   out_dir = RunMacro("Normalize Path", out_dir)
 
+  // Make a copy of the master_rts into the output directory to prevent
+  // this macro from modifying the actual master RTS.
+  opts = null
+  opts.from_rts = master_rts
+  opts.to_dir = out_dir
+  opts.include_hwy_files = "true"
+  {master_rts_copy, master_hwy_copy} = RunMacro("Copy RTS Files", opts)
+
   // Convert project IDs into route IDs
   proj_df = CreateObject("df")
   proj_df.read_csv(proj_list)
   v_pid = proj_df.get_vector("ProjID")
-  {rlyr, slyr, phlyr} = RunMacro("TCB Add RS Layers", master_rts, "ALL",)
+  {rlyr, slyr, phlyr} = RunMacro("TCB Add RS Layers", master_rts_copy, "ALL",)
   SetLayer(rlyr)
   route_set = "scenario routes"
   for i = 1 to v_pid.length do
@@ -114,7 +138,7 @@ Macro "Transit Project Management" (MacroOpts)
   RunMacro("Close All")
 
   // Open the route's stop dbd and add the scen_hwy
-  stops_dbd = Substitute(master_rts, ".rts", "S.dbd", )
+  stops_dbd = Substitute(master_rts_copy, ".rts", "S.dbd", )
   map = RunMacro("G30 new map", stops_dbd)
   {slyr} = GetDBLayers(stops_dbd)
   {nlyr, llyr} = GetDBLayers(scen_hwy)
@@ -214,34 +238,11 @@ Macro "Transit Project Management" (MacroOpts)
   tour_table = out_dir + "/create_rts_from_table.bin"
   create_df.write_bin(tour_table)
 
-  // Create a simple network of the scenario highway layer
-  SetLayer(llyr)
-  set_name = null
-  net_file = out_dir + "/create_rts_from_table.net"
-  label = "Net used to import RTS"
-  link_fields = {{"Length", {llyr + ".Length", llyr + ".Length", , , "False"}}}
-  node_fields = null
+  // Create a simple network
   opts = null
-  opts.[Time Units] = "Minutes"
-  opts.[Length Units] = "Miles"
-  opts.[Link ID] = llyr + ".ID"
-  opts.[Node ID] = nlyr + ".ID"
-  opts.[Turn Penalties] = "Yes"
-  nh = CreateNetwork(set_name, net_file, label, link_fields, node_fields, opts)
-
-  // Add centroids to the network to prevent routes from passing through
-  // Network Settings
-  Opts = null
-  Opts.Input.Database = scen_hwy
-  Opts.Input.Network = net_file
-  Opts.Input.[Centroids Set] = {
-    scen_hwy + "|" + nlyr, nlyr,
-    "centroids", centroid_qry
-  }
-  ok = RunMacro("TCB Run Operation", "Highway Network Setting", Opts, &Ret)
-  if !ok then Throw(
-    "Transit Project Management: Network settings failed"
-  )
+  opts.llyr = llyr
+  opts.centroid_qry = "[Zone Centroid] = 'Y'"
+  net_file = RunMacro("Create Simple Highway Net", opts)
 
   // Call TransCAD macro for importing a route system from a stop table.
   Opts = null
@@ -260,5 +261,104 @@ Macro "Transit Project Management" (MacroOpts)
   ret_value = RunMacro("TCB Run Operation", "Create RS From Table", Opts, &Ret)
   if !ret_value then Throw("Create RS From Table failed")
 
-  RunMacro("Close All")
+  // Delete the copy of the master route system and master highway
+  /*DeleteRouteSystem(master_rts_copy)
+  DeleteDatabase(master_hwy_copy)*/
+
+  /*RunMacro("Close All")*/
+EndMacro
+
+
+/*
+Helper macro. Makes a copy of all the files comprising a route system.
+Optionally includes the highway dbd.
+
+Inputs
+
+  MacroOpts
+    Named array containing all argument macros
+
+    from_rts
+      String
+      Full path to the route system to copy. Ends in ".rts"
+
+    to_dir
+      String
+      Full path to the directory where files will be copied
+
+    include_hwy_files
+      Optional True/False
+      Whether to also copy the highway files. Defaults to false. Because of the
+      fragile nature of the RTS file, the highway layer is first assumed to be
+      in the same folder as the RTS file. If it isn't, GetRouteSystemInfo() will
+      be used to try and locate it; however, this method is prone to errors if
+      the route system is in different places on different machines. As a general
+      rule, always keep the highway layer and the RTS layer together.
+
+Returns
+  rts_file
+    String
+    Full path to the resulting .RTS file
+*/
+
+Macro "Copy RTS Files" (MacroOpts)
+
+  // Argument extraction
+  from_rts = MacroOpts.from_rts
+  to_dir = MacroOpts.to_dir
+  include_hwy_files = MacroOpts.include_hwy_files
+
+  // Argument check
+  if from_rts = null then Throw("Copy RTS Files: 'from_rts' not provided")
+  if to_dir = null then Throw("Copy RTS Files: 'to_dir' not provided")
+  to_dir = RunMacro("Normalize Path", to_dir)
+
+  // Get the directory containing from_rts
+  a_rts_path = SplitPath(from_rts)
+  from_dir = RunMacro("Normalize Path", a_rts_path[1] + a_rts_path[2])
+  to_rts = to_dir + "/" + a_rts_path[3] + a_rts_path[4]
+
+  // Create to_dir if it doesn't exist
+  if GetDirectoryInfo(to_dir, "All") = null then CreateDirectory(to_dir)
+
+  // Get all files comprising the route system
+  {a_names, a_sizes} = GetRouteSystemFiles(from_rts)
+  for file_name in a_names do
+    from_file = from_dir + "/" + file_name
+    to_file = to_dir + "/" + file_name
+    CopyFile(from_file, to_file)
+  end
+
+  // If also copying the highway files
+  if include_hwy_files then do
+
+    // Assume the highway file is in the same directory as the RTS.
+    // Use the RTS file to get the name of the highway file.
+    a_rts_info = GetRouteSystemInfo(from_rts)
+    a_path = SplitPath(a_rts_info[1])
+    from_hwy_dbd = a_rts_path[1] + a_rts_path[2] + a_path[3] + a_path[4]
+
+    // If there is no file at that path, use the route system info directly
+    if GetFileInfo(from_hwy_dbd) = null
+      then from_hwy_dbd = a_rts_info[1]
+
+    // If there is no file at that path, throw an error message
+    if GetFileInfo(from_hwy_dbd) = null
+      then Throw(
+        "Copy RTS Files: The highway network associated with this RTS\n" +
+        "cannot be found in the same directory as the RTS nor at: \n" +
+        from_hwy_dbd
+      )
+
+    // Use the to
+    to_hwy_dbd = to_dir + "/" + a_path[3] + a_path[4]
+
+    CopyDatabase(from_hwy_dbd, to_hwy_dbd)
+
+    // Return both resulting RTS and DBD
+    return({to_rts, to_hwy_dbd})
+  end
+
+  // Return the resulting RTS file
+  return(to_rts)
 EndMacro
