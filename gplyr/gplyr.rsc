@@ -1125,7 +1125,6 @@ Class "df" (tbl)
     opts = null
     opts.view = jv
     self.read_view(opts)
-
     // Remove slave fields
     for sf in s_id do
       self.remove(sf)
@@ -1142,12 +1141,10 @@ Class "df" (tbl)
       // Create an array of raw field names without the current name. If the
       // current raw name is still found in this array, it means the field is
       // duplicated.
-      a_search = ExcludeArrayElements(V2A(a_rawnames), c, 1)
+      a_search = ExcludeArrayElements(V2A(v_rawnames), c, 1)
       pos = ArrayPosition(a_search, {rawname}, )
       if pos = 0 then self.rename(colname, rawname)
     end
-
-    self.create_editor()
 
     // Clean up the workspace
     CloseView(jv)
@@ -1602,7 +1599,7 @@ alternative: change the dir variable, but do not commit the change.
 Macro "test gplyr"
 
   // Input files used in some tests
-  dir = "C:\\projects/gisdk_tools/gplyr/unit_test_data"
+  dir = "Y:\\projects/gisdk_tools/repo/gplyr/unit_test_data"
   csv_file = dir + "/example.csv"
   bin_file = dir + "/example.bin"
   mtx_file = dir + "/example.mtx"
@@ -1781,7 +1778,7 @@ Macro "test gplyr"
   slave = master.copy()
   master.left_join(slave, {"Size", "Color"}, {"Size", "Color"})
   answer = {50, 75, 25, 100, 115, 35}
-  result = master.tbl.("Count.y")
+  result = master.tbl.("Count_y")
   for a = 1 to answer.length do
     if result[a] <> answer[a] then Throw("test: left_join() failed")
   end
