@@ -107,6 +107,7 @@ Macro "Transit Project Management" (MacroOpts)
   a_path = SplitPath(scen_hwy)
   out_dir = a_path[1] + a_path[2]
   out_dir = RunMacro("Normalize Path", out_dir)
+  output_rts_file = out_dir + "/" + output_rts_file
 
   // Make a copy of the master_rts into the output directory to prevent
   // this macro from modifying the actual master RTS.
@@ -257,9 +258,23 @@ Macro "Transit Project Management" (MacroOpts)
   Opts.Global.[RS Layers].StopLayer = slyr
   Opts.Global.[Stop Flag Field] = 3
   Opts.Global.[User ID Field] = 2
-  Opts.Output.[Output Routes] = out_dir + "/" + output_rts_file
+  Opts.Output.[Output Routes] = output_rts_file
   ret_value = RunMacro("TCB Run Operation", "Create RS From Table", Opts, &Ret)
   if !ret_value then Throw("Create RS From Table failed")
+
+  // The new route system is created without attributes. Join them back.
+  master_df = CreateObject("df")
+  master_df.read_bin(
+    Substitute(master_rts_copy, ".rts", "R.bin", )
+  )
+  scen_df = CreateObject("df")
+  scen_df.read_bin(
+    Substitute(output_rts_file, ".rts", "R.bin", )
+  )
+  scen_df.remove({"Route_Name", "Time", "Distance"})
+  scen_df.left_join(master_df, "Route_Number", "Route_ID")
+  Throw()
+  /*scen_df.create_editor()*/
 
   // Delete the copy of the master route system and master highway
   /*DeleteRouteSystem(master_rts_copy)
