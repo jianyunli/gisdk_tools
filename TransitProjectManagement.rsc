@@ -263,6 +263,7 @@ Macro "Transit Project Management" (MacroOpts)
   if !ret_value then Throw("Create RS From Table failed")
 
   // The new route system is created without attributes. Join them back.
+  RunMacro("Close All")
   master_df = CreateObject("df")
   master_df.read_bin(
     Substitute(master_rts_copy, ".rts", "R.bin", )
@@ -273,8 +274,9 @@ Macro "Transit Project Management" (MacroOpts)
   )
   scen_df.remove({"Route_Name", "Time", "Distance"})
   scen_df.left_join(master_df, "Route_Number", "Route_ID")
-  Throw()
-  /*scen_df.create_editor()*/
+  scen_df.update_bin(
+    Substitute(output_rts_file, ".rts", "R.bin", )
+  )
 
   // Delete the copy of the master route system and master highway
   /*DeleteRouteSystem(master_rts_copy)
