@@ -1369,24 +1369,6 @@ Macro "Copy RTS Files" (MacroOpts)
     opts.rts_file = from_rts
     from_hwy_dbd = RunMacro("Get RTS Highway File", opts)
 
-    /*// Assume the highway file is in the same directory as the RTS.
-    // Use the RTS file to get the name of the highway file.
-    a_rts_info = GetRouteSystemInfo(from_rts)
-    a_path = SplitPath(a_rts_info[1])
-    from_hwy_dbd = a_rts_path[1] + a_rts_path[2] + a_path[3] + a_path[4]
-
-    // If there is no file at that path, use the route system info directly
-    if GetFileInfo(from_hwy_dbd) = null
-      then from_hwy_dbd = a_rts_info[1]
-
-    // If there is no file at that path, throw an error message
-    if GetFileInfo(from_hwy_dbd) = null
-      then Throw(
-        "Copy RTS Files: The highway network associated with this RTS\n" +
-        "cannot be found in the same directory as the RTS nor at: \n" +
-        from_hwy_dbd
-      )*/
-
     // Use the to_dir to create the path to copy to
     a_path = SplitPath(from_hwy_dbd)
     to_hwy_dbd = to_dir + "/" + a_path[3] + a_path[4]
