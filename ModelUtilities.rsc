@@ -1300,6 +1300,114 @@ Macro "Create Simple Highway Net" (MacroOpts)
 
   return(net_file)
 EndMacro
+
+/*
+Macro to simplify the process of map creation.
+
+Inputs
+  MacroOpts
+    Named array that holds argument names
+
+    file
+      String
+      Full path to the file to map. Supported types:
+        Point, Line, Polygon geographic files. RTS files.
+
+    minimized
+      Optional String ("true" or "false")
+      Defaults to "true".
+      Whether to minimize the map. Makes a number of geospatial calculations
+      faster if the map does not have to be redrawn.
+
+Returns
+  An array of two things:
+  1. the name of the map
+  2. an array of layer names
+*/
+
+Macro "Create Map" (MacroOpts)
+
+  // Argument extraction
+  file = MacroOpts.file
+  minimized = MacroOpts.minimized
+
+  // Argument checking
+  if file = null then Throw("Create Map: 'file' not provided")
+  if minimized = null then minimized = "true"
+
+  // Determine file extension
+  {drive, directory, filename, ext} = SplitPath(file)
+  if Lower(ext) = ".dbd" then file_type = "dbd"
+  else if Lower(ext) = ".rts" then file_type = "rts"
+  else Throw("Create Map: 'file' must be either a '.dbd.' or '.rts' file")
+
+  // Get a unique name for the map
+  map_name = RunMacro("Get Unique Map Name")
+
+  // Create the map if a dbd file was passed
+  if file_type = "dbd" then do
+    a_layers = GetDBLayers(file)
+    {scope, label, rev} = GetDBInfo(file)
+    opts = null
+    opts.scope = scope
+    map_name = CreateMap(map_name, opts)
+    if minimized then MinimizeWindow(GetWindowName())
+    for layer in a_layers do
+      AddLayer(map_name, layer, file, layer)
+      RunMacro("G30 new layer default settings", layer)
+    end
+  end
+
+  // Create the map if a RTS file was passed
+  if file_type = "rts" then do
+
+    // Get the RTS's highway file
+    opts = null
+    opts.rts_file = file
+    hwy_dbd = RunMacro("Get RTS Highway File", opts)
+    {scope, label, rev} = GetDBInfo(hwy_dbd)
+    opts = null
+    opts.Scope = scope
+    map = CreateMap(map_name, opts)
+    if minimized then MinimizeWindow(GetWindowName())
+    {, , opts} = GetRouteSystemInfo(file)
+    rlyr = opts.Name
+    a_layers = AddRouteSystemLayer(map, rlyr, file, )
+    for layer in a_layers do
+      RunMacro("G30 new layer default settings", layer)
+    end
+  end
+
+  return({map_name, a_layers})
+EndMacro
+
+/*
+Helper to "Create Map" macro.
+Avoids duplciating map names by using an odd name and checking to make
+sure that map name does not already exist.
+
+Similar to "unique_view_name" in gplyr.
+*/
+
+Macro "Get Unique Map Name"
+  {map_names, idx, cur_name} = GetMaps()
+  if map_names.length = 0 then do
+    map_name = "gisdk_tools1"
+  end else do
+    num = 0
+    exists = "True"
+    while exists do
+      num = num + 1
+      map_name = "gisdk_tools" + String(num)
+      exists = if (ArrayPosition(map_names, {map_name}, ) <> 0)
+        then "True"
+        else "False"
+    end
+  end
+
+  return(map_name)
+EndMacro
+
 /*
 Makes a copy of all the files comprising a route system.
 Optionally includes the highway dbd.
