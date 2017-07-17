@@ -1300,3 +1300,150 @@ Macro "Create Simple Highway Net" (MacroOpts)
 
   return(net_file)
 EndMacro
+/*
+Makes a copy of all the files comprising a route system.
+Optionally includes the highway dbd.
+
+Inputs
+
+  MacroOpts
+    Named array containing all argument macros
+
+    from_rts
+      String
+      Full path to the route system to copy. Ends in ".rts"
+
+    to_dir
+      String
+      Full path to the directory where files will be copied
+
+    include_hwy_files
+      Optional True/False
+      Whether to also copy the highway files. Defaults to false. Because of the
+      fragile nature of the RTS file, the highway layer is first assumed to be
+      in the same folder as the RTS file. If it isn't, GetRouteSystemInfo() will
+      be used to try and locate it; however, this method is prone to errors if
+      the route system is in different places on different machines. As a general
+      rule, always keep the highway layer and the RTS layer together.
+
+Returns
+  rts_file
+    String
+    Full path to the resulting .RTS file
+*/
+
+Macro "Copy RTS Files" (MacroOpts)
+
+  // Argument extraction
+  from_rts = MacroOpts.from_rts
+  to_dir = MacroOpts.to_dir
+  include_hwy_files = MacroOpts.include_hwy_files
+
+  // Argument check
+  if from_rts = null then Throw("Copy RTS Files: 'from_rts' not provided")
+  if to_dir = null then Throw("Copy RTS Files: 'to_dir' not provided")
+  to_dir = RunMacro("Normalize Path", to_dir)
+
+  // Get the directory containing from_rts
+  a_rts_path = SplitPath(from_rts)
+  from_dir = RunMacro("Normalize Path", a_rts_path[1] + a_rts_path[2])
+  to_rts = to_dir + "/" + a_rts_path[3] + a_rts_path[4]
+
+  // Create to_dir if it doesn't exist
+  if GetDirectoryInfo(to_dir, "All") = null then CreateDirectory(to_dir)
+
+  // Get all files comprising the route system
+  {a_names, a_sizes} = GetRouteSystemFiles(from_rts)
+  for file_name in a_names do
+    from_file = from_dir + "/" + file_name
+    to_file = to_dir + "/" + file_name
+    CopyFile(from_file, to_file)
+  end
+
+  // If also copying the highway files
+  if include_hwy_files then do
+
+    // Get the highway file. Use gisdk_tools macro to avoid common errors
+    // with GetRouteSystemInfo()
+    opts = null
+    opts.rts_file = from_rts
+    from_hwy_dbd = RunMacro("Get RTS Highway File", opts)
+
+    /*// Assume the highway file is in the same directory as the RTS.
+    // Use the RTS file to get the name of the highway file.
+    a_rts_info = GetRouteSystemInfo(from_rts)
+    a_path = SplitPath(a_rts_info[1])
+    from_hwy_dbd = a_rts_path[1] + a_rts_path[2] + a_path[3] + a_path[4]
+
+    // If there is no file at that path, use the route system info directly
+    if GetFileInfo(from_hwy_dbd) = null
+      then from_hwy_dbd = a_rts_info[1]
+
+    // If there is no file at that path, throw an error message
+    if GetFileInfo(from_hwy_dbd) = null
+      then Throw(
+        "Copy RTS Files: The highway network associated with this RTS\n" +
+        "cannot be found in the same directory as the RTS nor at: \n" +
+        from_hwy_dbd
+      )*/
+
+    // Use the to_dir to create the path to copy to
+    a_path = SplitPath(from_hwy_dbd)
+    to_hwy_dbd = to_dir + "/" + a_path[3] + a_path[4]
+
+    CopyDatabase(from_hwy_dbd, to_hwy_dbd)
+
+    // Return both resulting RTS and DBD
+    return({to_rts, to_hwy_dbd})
+  end
+
+  // Return the resulting RTS file
+  return(to_rts)
+EndMacro
+
+/*
+Because of the fragile nature of the RTS file, GetRouteSystemInfo() can often
+return highway file paths that are incorrect. This macro checks to see if the
+highway file returned by GetRouteSystemInfo() exists. If not, it looks in the
+directory of the route system file.
+
+Inputs
+  MacroOpts
+    Named array that holds macro arguments
+
+    rts_file
+      String
+      Full path to the RTS file whose highway file you want to locate.
+*/
+
+Macro "Get RTS Highway File" (MacroOpts)
+
+  // Argument extraction
+  rts_file = MacroOpts.rts_file
+
+  // Argument checking
+  if rts_file = null then Throw("Get RTS Highway File: 'rts_file' not provided")
+
+  // Start by assuming the route system info is correct
+  a_rts_info = GetRouteSystemInfo(rts_file)
+  hwy_dbd = a_rts_info[1]
+
+  // If the highway file does not exist at the path according to the rts file,
+  // assume it is in the same directory as the RTS.
+  // Use the RTS file to get the name of the highway file.
+  if GetFileInfo(hwy_dbd) = null then do
+    a_path = SplitPath(hwy_dbd)
+    a_rts_path = SplitPath(rts_file)
+    hwy_dbd = a_rts_path[1] + a_rts_path[2] + a_path[3] + a_path[4]
+  end
+
+  // If there is no file at that path, throw an error message
+  if GetFileInfo(hwy_dbd) = null
+    then Throw(
+      "Get RTS Highway File: The highway network associated with this RTS\n" +
+      "cannot be found in the same directory as the RTS nor at: \n" +
+      hwy_dbd
+    )
+
+  return(hwy_dbd)
+EndMacro
