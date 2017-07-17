@@ -33,16 +33,6 @@ Macro "test"
   opts.output_rts_file = "Scenario Route System.rts"
   RunMacro("Transit Project Management", opts)
 
-
-  /*hwy_dbd = scen_dir + "/inputs/network/Scenario Line Layer.dbd"
-  {nlyr, llyr} = GetDBLayers(hwy_dbd)
-  //map = RunMacro("G30 new map", hwy_dbd)
-  AddLayerToWorkspace(llyr, hwy_dbd, llyr)
-  opts = null
-  //opts.llyr = llyr
-  opts.hwy_dbd = hwy_dbd
-  opts.centroid_qry = "[Zone Centroid] = 'Y'"
-  {nh, net_file} = RunMacro("Create Simple Highway Net", opts)*/
   ShowMessage("Done")
 EndMacro
 
@@ -84,6 +74,16 @@ Outputs
 
 Macro "Transit Project Management" (MacroOpts)
 
+  RunMacro("Create Scenario Route System", MacroOpts)
+  RunMacro("Update Scenario Attributes", MacroOpts)
+  RunMacro("Check Scenario Route System", MacroOpts)
+EndMacro
+
+/*
+Creates the scenario route system.
+*/
+
+Macro "Create Scenario Route System" (Macro Opts)
   // To prevent potential problems with view names, open files, etc.
   // close everything before starting.
   RunMacro("Close All")
@@ -285,9 +285,31 @@ Macro "Transit Project Management" (MacroOpts)
     Substitute(output_rts_file, ".rts", "R.bin", )
   )
 
-  // Delete the copy of the master route system and master highway
-  DeleteRouteSystem(master_rts_copy)
-  DeleteDatabase(master_hwy_copy)
+  // Reload the route system, which takes care of a few issues created by the
+  // create-from-stops and join steps.
+  opts = null
+  opts.file = output_rts_file
+  {map, a_layers} = RunMacro("Create Map", opts)
+  ReloadRouteSystem(output_rts_file)
 
+  // Clean up the files created by this macro
   RunMacro("Close All")
+  DeleteRouteSystem(master_rts_copy)
+  if GetFileInfo(Substitute(master_rts_copy, ".rts", "R.bin", )) <> null
+    then DeleteFile(Substitute(master_rts_copy, ".rts", "R.bin", ))
+  if GetFileInfo(Substitute(master_rts_copy, ".rts", "R.BX", )) <> null
+    then DeleteFile(Substitute(master_rts_copy, ".rts", "R.BX", ))
+  if GetFileInfo(Substitute(master_rts_copy, ".rts", "R.DCB", )) <> null
+    then DeleteFile(Substitute(master_rts_copy, ".rts", "R.DCB", ))
+  DeleteDatabase(master_hwy_copy)
+  DeleteTableFiles("FFB", tour_table, )
+  DeleteFile(net_file)
+EndMacro
+
+/*
+Updates the scenario route system attrbiutes based on the TransitProjectList.csv
+*/
+
+Macro "Update Scenario Attributes" (MacroOpts)
+
 EndMacro
