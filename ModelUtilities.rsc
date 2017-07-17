@@ -1504,6 +1504,9 @@ Inputs
     rts_file
       String
       Full path to the RTS file whose highway file you want to locate.
+
+Returns
+  String - full path to the highway file associated with the RTS.
 */
 
 Macro "Get RTS Highway File" (MacroOpts)

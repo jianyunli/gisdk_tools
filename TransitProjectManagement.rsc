@@ -117,11 +117,15 @@ Macro "Transit Project Management" (MacroOpts)
   opts.include_hwy_files = "true"
   {master_rts_copy, master_hwy_copy} = RunMacro("Copy RTS Files", opts)
 
+  // Create map of RTS
+  opts = null
+  opts.file = master_rts
+  {map, {rlyr, slyr, phlyr}} = RunMacro("Create Map", opts)
+
   // Convert project IDs into route IDs
   proj_df = CreateObject("df")
   proj_df.read_csv(proj_list)
   v_pid = proj_df.get_vector("ProjID")
-  {rlyr, slyr, phlyr} = RunMacro("TCB Add RS Layers", master_rts_copy, "ALL",)
   SetLayer(rlyr)
   route_set = "scenario routes"
   for i = 1 to v_pid.length do
@@ -136,11 +140,13 @@ Macro "Transit Project Management" (MacroOpts)
     )
   end
   v_rid = GetDataVector(rlyr + "|" + route_set, "Route_ID", )
-  RunMacro("Close All")
+  CloseMap(map)
 
   // Open the route's stop dbd and add the scen_hwy
   stops_dbd = Substitute(master_rts_copy, ".rts", "S.dbd", )
-  map = RunMacro("G30 new map", stops_dbd)
+  opts = null
+  opts.file = stops_dbd
+  {map, } = RunMacro("Create Map", opts)
   {slyr} = GetDBLayers(stops_dbd)
   {nlyr, llyr} = GetDBLayers(scen_hwy)
   AddLayer(map, nlyr, scen_hwy, nlyr)
@@ -261,9 +267,10 @@ Macro "Transit Project Management" (MacroOpts)
   Opts.Output.[Output Routes] = output_rts_file
   ret_value = RunMacro("TCB Run Operation", "Create RS From Table", Opts, &Ret)
   if !ret_value then Throw("Create RS From Table failed")
+  // The tcb method leaves a layer open. Use close all to close it and the map.
+  RunMacro("Close All")
 
   // The new route system is created without attributes. Join them back.
-  RunMacro("Close All")
   master_df = CreateObject("df")
   master_df.read_bin(
     Substitute(master_rts_copy, ".rts", "R.bin", )
@@ -279,8 +286,8 @@ Macro "Transit Project Management" (MacroOpts)
   )
 
   // Delete the copy of the master route system and master highway
-  /*DeleteRouteSystem(master_rts_copy)
-  DeleteDatabase(master_hwy_copy)*/
+  DeleteRouteSystem(master_rts_copy)
+  DeleteDatabase(master_hwy_copy)
 
-  /*RunMacro("Close All")*/
+  RunMacro("Close All")
 EndMacro
