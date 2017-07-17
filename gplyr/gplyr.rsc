@@ -758,8 +758,8 @@ Class "df" (tbl)
   EndItem
 
   /*
-  Avoids duplciating view names by using an odd name and adding a number based
-  on views open. Check to make sure view does not already exist.
+  Avoids duplciating view names by using an odd name and checking to
+  make sure view does not already exist.
   */
 
   Macro "unique_view_name" do
@@ -768,7 +768,7 @@ Class "df" (tbl)
       view_name = "gplyr1"
     end else do
       view_names = view_names[1]
-      num = view_names.length
+      num = 0
       exists = "True"
       while exists do
         num = num + 1
