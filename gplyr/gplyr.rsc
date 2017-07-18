@@ -202,7 +202,14 @@ Class "df" (tbl)
   EndItem
 
   /*
-  Returns a vector of table data given a field name
+  Inputs
+    field_name
+      String or array/vector of strings
+      Field name(s) to get vector(s) for.
+
+  Returns
+    a vector of table data given a field name. If given an array of
+    field names, returns an array of vectors.
   */
 
   Macro "get_vector" (field_name) do
@@ -210,10 +217,24 @@ Class "df" (tbl)
     // Argument checking
     if self.is_empty() then return()
     if field_name = null then Throw("get_vector: 'field_name' not provided")
+    if !self.in(TypeOf(field_name), {"string", "vector", "array"})
+      then Throw("get_vector: 'field_name' must be string, array, or vector")
+    if TypeOf(field_name) = "vector" then field_name = V2A(field_name)
 
-    field_name = self.check_name(field_name)
-    v = self.tbl.(field_name)
-    return(v)
+    if TypeOf(field_name) = "string" then do
+      field_name = self.check_name(field_name)
+      v = self.tbl.(field_name)
+      return(v)
+    end
+
+    if TypeOf(field_name) = "array" then do
+      for name in field_name do
+        name = self.check_name(name)
+        a = a + {self.tbl.(name)}
+      end
+      return(a)
+    end
+
   EndItem
 
   /*
@@ -1057,14 +1078,19 @@ Class "df" (tbl)
     // Argument check
     if query = null then Throw("filter: query is missing")
     if TypeOf(query) <> "string" then Throw("filter: query must be a string")
-    if Proper(Left(query, 6)) = "Select" then
-      Throw("filter: do not include 'Select * where' in your query")
 
     {view, file} = self.create_view()
     SetView(view)
-    query = "Select * where " + query
-    SelectByQuery("set", "Several", query)
+    query = RunMacro("Normalize Query", query)
+    nrow = SelectByQuery("set", "Several", query)
+    // if no records are found, return an empty df object.
     self.tbl = null
+    if nrow = 0 then do
+      CloseView(view)
+      DeleteTableFiles("FFB", file, )
+      return()
+    end
+    // Otherwise, read in the filtered view
     opts = null
     opts.view = view
     opts.set = "set"
@@ -1072,8 +1098,7 @@ Class "df" (tbl)
 
     // Clean up workspace
     CloseView(view)
-    DeleteFile(file)
-    DeleteFile(Substitute(file, ".bin", ".DCB", ))
+    DeleteTableFiles("FFB", file, )
   EndItem
 
 
