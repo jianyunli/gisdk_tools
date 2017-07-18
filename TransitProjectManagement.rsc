@@ -74,16 +74,6 @@ Outputs
 
 Macro "Transit Project Management" (MacroOpts)
 
-  RunMacro("Create Scenario Route System", MacroOpts)
-  RunMacro("Update Scenario Attributes", MacroOpts)
-  RunMacro("Check Scenario Route System", MacroOpts)
-EndMacro
-
-/*
-Creates the scenario route system.
-*/
-
-Macro "Create Scenario Route System" (Macro Opts)
   // To prevent potential problems with view names, open files, etc.
   // close everything before starting.
   RunMacro("Close All")
@@ -109,6 +99,30 @@ Macro "Create Scenario Route System" (Macro Opts)
   out_dir = RunMacro("Normalize Path", out_dir)
   output_rts_file = out_dir + "/" + output_rts_file
 
+  // Update the values of MacroOpts
+  MacroOpts.output_rts_file = output_rts_file
+  MacroOpts.centroid_qry = centroid_qry
+  MacroOpts.out_dir = out_dir
+
+  /*RunMacro("Create Scenario Route System", MacroOpts)*/
+  RunMacro("Update Scenario Attributes", MacroOpts)
+  /*RunMacro("Check Scenario Route System", MacroOpts)*/
+EndMacro
+
+/*
+Creates the scenario route system.
+*/
+
+Macro "Create Scenario Route System" (MacroOpts)
+
+  // Argument extraction
+  master_rts = MacroOpts.master_rts
+  scen_hwy = MacroOpts.scen_hwy
+  proj_list = MacroOpts.proj_list
+  centroid_qry = MacroOpts.centroid_qry
+  output_rts_file = MacroOpts.output_rts_file
+  out_dir = MacroOpts.out_dir
+
   // Make a copy of the master_rts into the output directory to prevent
   // this macro from modifying the actual master RTS.
   opts = null
@@ -117,30 +131,16 @@ Macro "Create Scenario Route System" (Macro Opts)
   opts.include_hwy_files = "true"
   {master_rts_copy, master_hwy_copy} = RunMacro("Copy RTS Files", opts)
 
-  // Create map of RTS
-  opts = null
-  opts.file = master_rts
-  {map, {rlyr, slyr, phlyr}} = RunMacro("Create Map", opts)
-
-  // Convert project IDs into route IDs
+  // Get project IDs from the project list
   proj_df = CreateObject("df")
   proj_df.read_csv(proj_list)
   v_pid = proj_df.get_vector("ProjID")
-  SetLayer(rlyr)
-  route_set = "scenario routes"
-  for i = 1 to v_pid.length do
-    id = v_pid[i]
 
-    id = if TypeOf(id) = "string" then "'" + id + "'" else String(id)
-    qry = "Select * where ProjID = " + id
-    operation = if i = 1 then "several" else "more"
-    n = SelectByQuery(route_set, operation, qry)
-    if n = 0 then Throw(
-      "Route with ProjID = " + id + " not found in master layer."
-    )
-  end
-  v_rid = GetDataVector(rlyr + "|" + route_set, "Route_ID", )
-  CloseMap(map)
+  // Convert the project IDs into route IDs
+  opts = null
+  opts.rts_file = master_rts
+  opts.v_pid = v_pid
+  v_rid = RunMacro("Convert ProjID to RouteID", opts)
 
   // Open the route's stop dbd and add the scen_hwy
   stops_dbd = Substitute(master_rts_copy, ".rts", "S.dbd", )
@@ -292,7 +292,12 @@ Macro "Create Scenario Route System" (Macro Opts)
   {map, a_layers} = RunMacro("Create Map", opts)
   ReloadRouteSystem(output_rts_file)
 
-  // Clean up the files created by this macro
+  // Clean up the files created by this macro that aren't needed anymore
+  RunMacro("Close All")
+  DeleteTableFiles("FFB", tour_table, )
+  DeleteFile(net_file)
+EndMacro
+
 /*
 Updates the scenario route system attributes based on the TransitProjectList.csv
 */
@@ -354,6 +359,34 @@ Macro "Update Scenario Attributes" (MacroOpts)
 
   CloseMap(map)
 EndMacro
+
+/*
+
+*/
+
+Macro "Check Scenario Route System" (MacroOpts)
+
+  // Argument extraction
+  master_rts = MacroOpts.master_rts
+  scen_hwy = MacroOpts.scen_hwy
+  proj_list = MacroOpts.proj_list
+  centroid_qry = MacroOpts.centroid_qry
+  output_rts_file = MacroOpts.output_rts_file
+  out_dir = MacroOpts.out_dir
+
+  // Get project IDs from the project list
+  proj_df = CreateObject("df")
+  proj_df.read_csv(proj_list)
+  v_pid = proj_df.get_vector("ProjID")
+
+  // Convert the project IDs into route IDs
+  opts = null
+  opts.rts_file = master_rts
+  opts.v_pid = v_pid
+  v_rid = RunMacro("Convert ProjID to RouteID", opts)
+
+
+  // Clean up files
   RunMacro("Close All")
   DeleteRouteSystem(master_rts_copy)
   if GetFileInfo(Substitute(master_rts_copy, ".rts", "R.bin", )) <> null
@@ -363,14 +396,68 @@ EndMacro
   if GetFileInfo(Substitute(master_rts_copy, ".rts", "R.DCB", )) <> null
     then DeleteFile(Substitute(master_rts_copy, ".rts", "R.DCB", ))
   DeleteDatabase(master_hwy_copy)
-  DeleteTableFiles("FFB", tour_table, )
-  DeleteFile(net_file)
 EndMacro
 
 /*
-Updates the scenario route system attrbiutes based on the TransitProjectList.csv
+Helper macro used to convert project IDs (which are on the route layer) to
+route IDs (which are included on the node and link tables of the route layer).
+
+Inputs
+  MacroOpts
+    Named array that holds arguments (e.g. MacroOpts.master_rts)
+
+    rts_file
+      String
+      Full path to the .rts file that contains both route and project IDs
+
+    v_id
+      Array or vector of project IDs (or route IDs if reverse = "true")
+
+    reverse
+      Optional String ("true"/"false")
+      Defaults to false. If true, converts route IDs into project IDs
+
+Returns
+  A vector of route IDs corresponding to the input project IDs
 */
 
-Macro "Update Scenario Attributes" (MacroOpts)
+Macro "Convert ProjID to RouteID" (MacroOpts)
 
+  // Argument extraction
+  rts_file = MacroOpts.rts_file
+  v_id = MacroOpts.v_id
+  reverse = MacroOpts.reverse
+
+  if reverse = null then reverse = "false"
+
+  // Create map of RTS
+  opts = null
+  opts.file = rts_file
+  {map, {rlyr, slyr, phlyr}} = RunMacro("Create Map", opts)
+
+  // Convert project IDs into route IDs
+  SetLayer(rlyr)
+  route_set = "scenario routes"
+  for i = 1 to v_id.length do
+    id = v_id[i]
+
+    id = if TypeOf(id) = "string" then "'" + id + "'" else String(id)
+    qry = if reverse
+      then "Select * where Route_ID = " + id
+      else "Select * where ProjID = " + id
+    operation = if i = 1 then "several" else "more"
+    n = SelectByQuery(route_set, operation, qry)
+    if n = 0 then do
+      string = if reverse
+        then "Route with Route_ID = " + id + " not found in route layer."
+        else "Route with ProjID = " + id + " not found in route layer."
+      Throw(string)
+    end
+  end
+  v_result = if reverse
+    then GetDataVector(rlyr + "|" + route_set, "ProjID", )
+    else GetDataVector(rlyr + "|" + route_set, "Route_ID", )
+  CloseMap(map)
+
+  return(v_result)
 EndMacro
