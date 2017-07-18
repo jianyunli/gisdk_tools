@@ -293,6 +293,67 @@ Macro "Create Scenario Route System" (Macro Opts)
   ReloadRouteSystem(output_rts_file)
 
   // Clean up the files created by this macro
+/*
+Updates the scenario route system attributes based on the TransitProjectList.csv
+*/
+
+Macro "Update Scenario Attributes" (MacroOpts)
+
+  // Argument extraction
+  master_rts = MacroOpts.master_rts
+  scen_hwy = MacroOpts.scen_hwy
+  proj_list = MacroOpts.proj_list
+  centroid_qry = MacroOpts.centroid_qry
+  output_rts_file = MacroOpts.output_rts_file
+
+  // Read in the parameter file
+  param = CreateObject("df")
+  param.read_csv(proj_list)
+
+  // Create a map of the scenario RTS
+  opts = null
+  opts.file = output_rts_file
+  {map, {rlyr}} = RunMacro("Create Map", opts)
+  SetLayer(rlyr)
+
+  // Loop over column names and update attributes. ProjID is skipped.
+  a_colnames = param.colnames()
+  // Only do this process if columns other than ProjID exist.
+  if a_colnames.length > 1 then do
+    for col_name in a_colnames do
+      if col_name = "ProjID" then continue
+
+      // Create a data frame that filters out null values from this column
+      temp = param.copy()
+      temp.filter(col_name + " <> null")
+
+      // Break if this column is empty
+      test = temp.is_empty()
+      if temp.is_empty() then continue
+
+      {v_pid, v_value} = temp.get_vector({"ProjID", col_name})
+      for i = 1 to v_pid.length do
+        pid = v_pid[i]
+        value = v_value[i]
+
+        // Locate the route with this project ID. If not found, throw an error.
+        opts = null
+        opts.Exact = "true"
+        rh = LocateRecord(rlyr + "|", "ProjID", {pid}, opts)
+        if rh = null then do
+          pid_string = if TypeOf(pid) = "string" then pid else String(pid)
+          Throw("ProjID '" + pid_string + "' not found in route layer")
+        end
+
+        // Update the attribute
+        SetRecord(rlyr, rh)
+        rlyr.(col_name) = value
+      end
+    end
+  end
+
+  CloseMap(map)
+EndMacro
   RunMacro("Close All")
   DeleteRouteSystem(master_rts_copy)
   if GetFileInfo(Substitute(master_rts_copy, ".rts", "R.bin", )) <> null
