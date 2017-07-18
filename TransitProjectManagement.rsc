@@ -139,7 +139,7 @@ Macro "Create Scenario Route System" (MacroOpts)
   // Convert the project IDs into route IDs
   opts = null
   opts.rts_file = master_rts
-  opts.v_pid = v_pid
+  opts.v_id = v_pid
   v_rid = RunMacro("Convert ProjID to RouteID", opts)
 
   // Open the route's stop dbd and add the scen_hwy
@@ -250,6 +250,10 @@ Macro "Create Scenario Route System" (MacroOpts)
   opts.llyr = llyr
   opts.centroid_qry = "[Zone Centroid] = 'Y'"
   net_file = RunMacro("Create Simple Highway Net", opts)
+
+  // Get the name of the master (copy) route layer
+  {, , a_info} = GetRouteSystemInfo(master_rts_copy)
+  rlyr = a_info.Name
 
   // Call TransCAD macro for importing a route system from a stop table.
   Opts = null
