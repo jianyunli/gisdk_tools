@@ -1122,15 +1122,31 @@ Class "df" (tbl)
     if m_id.length <> s_id.length then
       Throw("left_join: 'm_id' and 's_id' are not the same length")
 
+    // Check that master and slave fields are present in the table
+    colnames = self.colnames()
+    for field in m_id do
+      if !self.in(field, colnames) then Throw(
+        "left_join: master field '" + field + "' not found in master table"
+      )
+    end
+    colnames = slave_tbl.colnames()
+    for field in s_id do
+      if !self.in(field, colnames) then Throw(
+        "left_join: slave field '" + field + "' not found in slave table"
+      )
+    end
+
     // To avoid duplication of field names. Add "x" to all master fields and
-    // add "y" to all slave fields.
+    // add "y" to all slave fields. To avoid modifying the slave table, make
+    // a copy of it first.
+    slave_copy = slave_tbl.copy()
     v_colnames = self.colnames()
     for c in v_colnames do
       self.rename(c, c + "_x")
     end
-    v_colnames = slave_tbl.colnames()
+    v_colnames = slave_copy.colnames()
     for c in v_colnames do
-      slave_tbl.rename(c, c + "_y")
+      slave_copy.rename(c, c + "_y")
     end
     // Do the same for m_id and s_id arrays
     m_id = V2A(A2V(m_id) + "_x")
@@ -1138,7 +1154,7 @@ Class "df" (tbl)
 
     // Create views of both tables
     {master_view, master_file} = self.create_view()
-    {slave_view, slave_file} = slave_tbl.create_view()
+    {slave_view, slave_file} = slave_copy.create_view()
 
     // Create field specs for master and slave fields
     m_spec = V2A(master_view + "." + A2V(m_id))
