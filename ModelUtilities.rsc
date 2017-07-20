@@ -1602,64 +1602,42 @@ Macro "Spatial Join" (MacroOpts)
     if threshold = null then Throw("Map units must be feet or miles")
   end
 
-  // Create the selection sets needed on both layers
-  SetLayer(slave_layer)
-  set1 = CreateSet("initial slave features")
-  set3 = CreateSet("final slave features")
-  SetLayer(master_layer)
-  set2 = CreateSet("intermediate master nodes")
-
-  // Modify the master layer by adding a slave_id field
+  // Add fields to the master_layer
   a_fields = {
-    {"slave_id", "Integer", 10, 3,,,,"used to join to slave layer"}
+    {"slave_id", "Integer", 10, ,,,,"used to join to slave layer"},
+    {"slave_dist", "Real", 10, 3,,,,"used to join to slave layer"}
   }
-  RunMacro("Add Fields", master_layer, a_fields, {null})
+  RunMacro("Add Fields", master_layer, a_fields, )
 
-  // Perorm the first spatial selection. Selects slave features that are
-  // within the threhold distance from master features. Some master features
-  // may not find slave features within the threshold.
-  SetLayer(slave_layer)
-  opts = null
-  opts.Inclusion = "Intersecting"
-  n1 = SelectNearestFeatures(
-    set1, "several", master_layer + "|" + master_set, threshold, opts
+  // Tag the master layer with slave IDs and distances
+  TagLayer(
+    "Value",
+    master_layer + "|" + master_set,
+    master_layer + ".slave_id",
+    slave_layer + "|" + slave_set,
+    slave_layer + ".ID"
   )
-  if n1 = 0 then Throw(
-    "Spatial Join: No features found in the slave layer within the threshold"
+  TagLayer(
+    "Distance",
+    master_layer + "|" + master_set,
+    master_layer + ".slave_dist",
+    slave_layer + "|" + slave_set,
   )
 
-  // Perform the second spatial selection. This selects master features that
-  // are within the threshold distance of the slave features in set1. In effect,
-  // this creates a new selection set on the master layer of original features
-  // that will always find slave features nearby when creating set3.
+  // Select records where the tagged distance is greater than the threshol and
+  // remove those tagged IDs.
   SetLayer(master_layer)
-  opts = null
-  opts.Inclusion = "Intersecting"
-  n2 = SelectNearestFeatures(
-    set2, "several", slave_layer + "|" + set1, threshold, opts
-  )
-
-  // Perform the final spatial selection.
-  SetLayer(slave_layer)
-  opts = null
-  opts.Inclusion = "Intersecting"
-  n3 = SelectNearestFeatures(
-    set3, "several", master_layer + "|" + set2, threshold, opts
-  )
-
-  // Transfer the set3 IDs onto the master layer
-  v_sid = GetDataVector(slave_layer + "|" + set3, "ID", )
-  SetDataVector(master_layer + "|" + set2, "slave_id", v_sid, )
+  qry = "Select * where nz(slave_dist) > " + String(threshold)
+  set = CreateSet("set")
+  n = SelectByQuery(set, "several", qry)
+  if n > 0 then do
+    v = Vector(n, "Long", )
+    SetDataVector(master_layer + "|" + set, "slave_id", v, )
+  end
+  DeleteSet(set)
 
   // Create a joined view based on the slave IDs
   jv = JoinViews("jv", master_layer + ".slave_id", slave_layer + ".ID", )
-
-  // Remove the sets created by this macro
-  SetLayer(slave_layer)
-  DeleteSet(set1)
-  DeleteSet(set3)
-  SetLayer(master_layer)
-  DeleteSet(set2)
 
   SetView(jv)
   return(jv)
