@@ -1487,6 +1487,15 @@ Macro "Copy RTS Files" (MacroOpts)
 
     CopyDatabase(from_hwy_dbd, to_hwy_dbd)
 
+    // Change the to_rts to point to the to_hwy_dbd
+    {nlyr, llyr} = GetDBLayers(to_hwy_dbd)
+    ModifyRouteSystem(
+      to_rts,{
+        {"Geography", to_hwy_dbd, llyr},
+        {"Link ID", "ID"}
+      }
+    )
+
     // Return both resulting RTS and DBD
     return({to_rts, to_hwy_dbd})
   end
