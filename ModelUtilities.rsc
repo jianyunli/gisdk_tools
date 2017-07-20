@@ -1544,3 +1544,123 @@ Macro "Get RTS Highway File" (MacroOpts)
 
   return(hwy_dbd)
 EndMacro
+
+/*
+This macro expands the base functionality of SelectNearestFeatures() to perform
+a spatial join. Only works on point and area layers. Master and
+slave layers must be open in the same (current) map.
+
+Inputs
+  MacroOpts
+    Named array of macro arguments (e.g. MacroOpts.master_view)
+
+    master_layer
+      String
+      Name of master layer (left side of table)
+
+    master_set
+      Optional string
+      Name of selection set of features to be joined. If null, all features
+      are joined.
+
+    slave_layer
+      String
+      Name of the slave layer (right side of table)
+
+    slave_set
+      Optional string
+      Name of selection set that slave features must be in to be joined.
+
+    threshold
+      Optional string
+      Maximum distance to search around each feature in the slave layer.
+      Defaults to 100 feet.
+
+
+Returns
+  The name of the joined view.
+  Also modifies the master table by adding a slave ID field (this is how the
+  join is accomplished).
+*/
+
+Macro "Spatial Join" (MacroOpts)
+
+  // Argument extraction
+  master_layer = MacroOpts.master_layer
+  master_set = MacroOpts.master_set
+  slave_layer = MacroOpts.slave_layer
+  slave_set = MacroOpts.slave_set
+  threshold = MacroOpts.threshold
+
+  // Argument checking
+  if master_layer = null then Throw("Spatial Join: 'master_layer' not provided")
+  if slave_layer = null then Throw("Spatial Join: 'slave_layer' not provided")
+  if threshold = null then do
+    units = GetMapUnits("Plural")
+    threshold = if units = "Miles" then 100 / 5280
+      else if units = "Feet" then 100
+    if threshold = null then Throw("Map units must be feet or miles")
+  end
+
+  // Create the selection sets needed on both layers
+  SetLayer(slave_layer)
+  set1 = CreateSet("initial slave features")
+  set3 = CreateSet("final slave features")
+  SetLayer(master_layer)
+  set2 = CreateSet("intermediate master nodes")
+
+  // Modify the master layer by adding a slave_id field
+  a_fields = {
+    {"slave_id", "Integer", 10, 3,,,,"used to join to slave layer"}
+  }
+  RunMacro("Add Fields", master_layer, a_fields, {null})
+
+  // Perorm the first spatial selection. Selects slave features that are
+  // within the threhold distance from master features. Some master features
+  // may not find slave features within the threshold.
+  SetLayer(slave_layer)
+  opts = null
+  opts.Inclusion = "Intersecting"
+  n1 = SelectNearestFeatures(
+    set1, "several", master_layer + "|" + master_set, threshold, opts
+  )
+  if n1 = 0 then Throw(
+    "Spatial Join: No features found in the slave layer within the threshold"
+  )
+
+  // Perform the second spatial selection. This selects master features that
+  // are within the threshold distance of the slave features in set1. In effect,
+  // this creates a new selection set on the master layer of original features
+  // that will always find slave features nearby when creating set3.
+  SetLayer(master_layer)
+  opts = null
+  opts.Inclusion = "Intersecting"
+  n2 = SelectNearestFeatures(
+    set2, "several", slave_layer + "|" + set1, threshold, opts
+  )
+
+  // Perform the final spatial selection.
+  SetLayer(slave_layer)
+  opts = null
+  opts.Inclusion = "Intersecting"
+  n3 = SelectNearestFeatures(
+    set3, "several", master_layer + "|" + set2, threshold, opts
+  )
+
+  // Transfer the set3 IDs onto the master layer
+  v_sid = GetDataVector(slave_layer + "|" + set3, "ID", )
+  SetDataVector(master_layer + "|" + set2, "slave_id", v_sid, )
+
+  // Create a joined view based on the slave IDs
+  jv = JoinViews("jv", master_layer + ".slave_id", slave_layer + ".ID", )
+
+  // Remove the sets created by this macro
+  SetLayer(slave_layer)
+  DeleteSet(set1)
+  DeleteSet(set3)
+  SetLayer(master_layer)
+  DeleteSet(set2)
+
+  SetView(jv)
+  return(jv)
+EndMacro
