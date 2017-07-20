@@ -734,9 +734,10 @@ a_fields
 
 a_initial_values
   Array (optional)
-  If provided, the field will be set to this value. This can be used to ensure
-  that a field starts at null. If left blank, and the field is already present,
-  then the previous values remain.
+  If not provided, any fields to add that already exist in the table will not be
+  modified in any way. If provided, the added field will be set to this value.
+  This can be used to ensure that a field is set to null, zero, etc. even if it
+  already exists.
 */
 
 Macro "Add Fields" (view, a_fields, a_initial_values)
@@ -782,7 +783,7 @@ Macro "Add Fields" (view, a_fields, a_initial_values)
 
   // Set initial field values if provided
   if a_initial_values <> null then do
-    length = GetRecordCount(view, )
+    nrow = GetRecordCount(view, )
     for f = 1 to a_initial_values.length do
       field = a_fields[f][1]
       type = a_fields[f][2]
@@ -792,7 +793,7 @@ Macro "Add Fields" (view, a_fields, a_initial_values)
 
       opts = null
       opts.Constant = init_value
-      v = Vector(length, type)
+      v = Vector(nrow, type, opts)
       SetDataVector(view + "|", field, v, )
     end
   end
