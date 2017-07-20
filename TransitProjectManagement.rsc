@@ -216,7 +216,20 @@ Macro "Create Scenario Route System" (MacroOpts)
   v = GetDataVector(jv + "|", nlyr + ".ID", )
   SetDataVector(jv + "|", slyr + ".Node_ID", v, )
   CloseView(jv)
-  // The spatial join leaves a "slave_id" field. Remove it.
+
+  // The spatial join leaves "slave_id" and "slave_dist" fields.
+  // Use them to determine missing nodes and then remove them.
+  SetLayer(slyr)
+  set = CreateSet("set")
+  qry = "Select * where slave_dist <> null and slave_id = null"
+  n = SelectByQuery(set, "several", qry)
+  if n > 0 then do
+    opts = null
+    opts.Constant = 1
+    v = Vector(n, "Long", opts)
+    SetDataVector(slyr + "|" + set, "missing_node", v, )
+    DeleteSet(set)
+  end
   RunMacro("Drop Field", slyr, {"slave_id", "slave_dist"})
 
   // Read in the selected records to a data frame
