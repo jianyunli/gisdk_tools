@@ -143,49 +143,105 @@ Macro "Create Scenario Route System" (MacroOpts)
   v_rid = RunMacro("Convert ProjID to RouteID", opts)
 
   // Open the route's stop dbd and add the scen_hwy
-  stops_dbd = Substitute(master_rts_copy, ".rts", "S.dbd", )
+  master_stops_dbd = Substitute(master_rts_copy, ".rts", "S.dbd", )
   opts = null
-  opts.file = stops_dbd
+  opts.file = master_stops_dbd
   {map, } = RunMacro("Create Map", opts)
-  {slyr} = GetDBLayers(stops_dbd)
+  {slyr} = GetDBLayers(master_stops_dbd)
   {nlyr, llyr} = GetDBLayers(scen_hwy)
   AddLayer(map, nlyr, scen_hwy, nlyr)
   AddLayer(map, llyr, scen_hwy, llyr)
 
-  // Create a selection set of routes in the proj_list using
+  // Create a selection set of route stops from the proj_list using
   // the route IDs. (The ProjID field is not in the stops dbd.)
   SetLayer(slyr)
-  route_set = "scenario routes"
+  route_stops = "scenario routes"
   for i = 1 to v_rid.length do
     id = v_rid[i]
 
     id = if TypeOf(id) = "string" then "'" + id + "'" else String(id)
     qry = "Select * where Route_ID = " + id
     operation = if i = 1 then "several" else "more"
-    SelectByQuery(route_set, operation, qry)
+    SelectByQuery(route_stops, operation, qry)
   end
 
-  // Add stop layer fields called Node_ID and missing_node
+  /*
+  Add stop layer fields. The tour table required to create a fresh route
+  system requires the following fields:
+  Route_Number
+  Node_ID
+  Stop_Flag
+  Stop_ID
+  Stop_Name
+
+  On a freshly-created route system, only the following fields are present
+  on the stop layer:
+  Route_ID (can be renamed to Route_Number)
+  STOP_ID (can be renamed to Stop_ID)
+
+  Thus, the following fields must be created:
+  Stop_Flag (filled with 1 because these are stop records)
+  Node_ID (filled by tagging stops to nodes)
+  Stop_Name (left empty)
+
+  A final field "missing_node" is added for reporting purposes.
+  */
   a_fields = {
+    {"Stop_Flag", "Integer", 10,,,,,"Filled with 1s"},
+    {"Stop_Name", "Character", 10,,,,,""},
     {"Node_ID", "Integer", 10,,,,,"Scenario network node id"},
     {"missing_node", "Integer", 10,,,,,
     "1: a stop in the master rts could not find a nearby node"}
   }
-  RunMacro("Add Fields", slyr, a_fields, {0, 0})
+  RunMacro("Add Fields", slyr, a_fields, {1, , , 0})
 
   // Setup the search threshold for SelectNearestFeatures
-  units = GetMapUnits("Plural")
+  /*units = GetMapUnits("Plural")
   threshold = if (units = "Miles") then 100 / 5280
     else if (units = "Feet") then 100
-  if threshold = null then Throw("Map units must be feet or miles")
+  if threshold = null then Throw("Map units must be feet or miles")*/
 
-  // Create a selection set of centroids on the node layer
+  // Create a selection set of centroids on the node layer. These will be
+  // excluded so that routes do not pass through them. Also create a
+  // non-centroid set.
   SetLayer(nlyr)
-  num_centroids = SelectByQuery("centroids", "several", centroid_qry)
+  centroid_set = CreateSet("centroids")
+  num_centroids = SelectByQuery(centroid_set, "several", centroid_qry)
+  non_centroid_set = CreateSet("non-centroids")
+  SetInvert(non_centroid_set, centroid_set)
 
-  // Loop over each stop in the table and find the nearest scenario node ID
-  rh = GetFirstRecord(slyr + "|" + route_set, )
+  // Perform a spatial join to match scenario nodes to master nodes.
+  opts = null
+  opts.master_layer = slyr
+  opts.master_set = route_stops
+  opts.slave_layer = nlyr
+  opts.slave_set = non_centroid_set
+  jv = RunMacro("Spatial Join", opts)
+
+  // Transfer the scenario node ID into the Node_ID field
+  v = GetDataVector(jv + "|", nlyr + ".ID", )
+  SetDataVector(jv + "|", slyr + ".Node_ID", v, )
+  CloseView(jv)
+  // The spatial join leaves a "slave_id" field. Remove it.
+  RunMacro("Drop Field", slyr, {"slave_id", "slave_dist"})
+
+  /*// Loop over each stop in the table and find the nearest scenario node ID
+  CreateProgressBar("", "true")
+  rh = GetFirstRecord(slyr + "|" + route_stops, )
+  num_rec = GetRecordCount(slyr, route_stops)
   while rh <> null do
+
+    // Update progress bar
+    count = nz(count) + 1
+    cancel = UpdateProgressBar(
+      "Locating master stops to scenario network",
+      round(count / num_rec * 100, 0)
+    )
+    if cancel then do
+      RunMacro("Close All")
+      RunMacro("Destroy Progress Bars")
+      Throw("User pressed the cancel button")
+    end
 
     // Create a stop set to hold the current record
     SetRecord(slyr, rh)
@@ -199,7 +255,7 @@ Macro "Create Scenario Route System" (MacroOpts)
     SetLayer(nlyr)
     nearest_node_set = "nearest nodes"
     opts = null
-    opts.[Source Not] = "centroids"
+    opts.[Source Not] = centroid_set
     n = SelectNearestFeatures(
       nearest_node_set, "several", slyr + "|" + current_stop_set,
       threshold, opts
@@ -213,14 +269,15 @@ Macro "Create Scenario Route System" (MacroOpts)
 
     SetLayer(slyr)
     UnselectRecord(current_stop_set)
-    rh = GetNextRecord(slyr + "|" + route_set, , )
+    rh = GetNextRecord(slyr + "|" + route_stops, , )
   end
+  DestroyProgressBar()*/
 
   // Read in the selected records to a data frame
   stop_df = CreateObject("df")
   opts = null
   opts.view = slyr
-  opts.set = route_set
+  opts.set = route_stops
   stop_df.read_view(opts)
 
   // Create a table with the proper format to be read by TC's
@@ -235,8 +292,8 @@ Macro "Create Scenario Route System" (MacroOpts)
   // Stop_Name
   create_df = stop_df.copy()
   create_df.rename(
-    {"Route_ID", "STOP_FLAG", "STOP_ID", "Stop Name"},
-    {"Route_Number", "Stop_Flag", "Stop_ID", "Stop_Name"}
+    {"Route_ID", "STOP_ID", "Stop Name"},
+    {"Route_Number", "Stop_ID", "Stop_Name"}
   )
   create_df.filter("missing_node <> 1")
   create_df.select(
@@ -407,7 +464,7 @@ Macro "Check Scenario Route System" (MacroOpts)
   opts = null
   opts.file = output_rts_file
   {scen_map, {rlyr_s, slyr_s, , , llyr_s}} = RunMacro("Create Map", opts)
-  v_pid = GetDataVector(rlyr_s + "|", "Route_ID", )
+  v_pid = GetDataVector(rlyr_s + "|", "ProjID", )
 
   // Compare route lengths between master and scenario
   data = null
