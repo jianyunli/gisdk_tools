@@ -195,12 +195,6 @@ Macro "Create Scenario Route System" (MacroOpts)
   }
   RunMacro("Add Fields", slyr, a_fields, {1, , , 0})
 
-  // Setup the search threshold for SelectNearestFeatures
-  /*units = GetMapUnits("Plural")
-  threshold = if (units = "Miles") then 100 / 5280
-    else if (units = "Feet") then 100
-  if threshold = null then Throw("Map units must be feet or miles")*/
-
   // Create a selection set of centroids on the node layer. These will be
   // excluded so that routes do not pass through them. Also create a
   // non-centroid set.
@@ -224,54 +218,6 @@ Macro "Create Scenario Route System" (MacroOpts)
   CloseView(jv)
   // The spatial join leaves a "slave_id" field. Remove it.
   RunMacro("Drop Field", slyr, {"slave_id", "slave_dist"})
-
-  /*// Loop over each stop in the table and find the nearest scenario node ID
-  CreateProgressBar("", "true")
-  rh = GetFirstRecord(slyr + "|" + route_stops, )
-  num_rec = GetRecordCount(slyr, route_stops)
-  while rh <> null do
-
-    // Update progress bar
-    count = nz(count) + 1
-    cancel = UpdateProgressBar(
-      "Locating master stops to scenario network",
-      round(count / num_rec * 100, 0)
-    )
-    if cancel then do
-      RunMacro("Close All")
-      RunMacro("Destroy Progress Bars")
-      Throw("User pressed the cancel button")
-    end
-
-    // Create a stop set to hold the current record
-    SetRecord(slyr, rh)
-    SetLayer(slyr)
-    current_stop_set = "current stop"
-    CreateSet(current_stop_set)
-    SelectRecord(current_stop_set)
-
-    // Locate the nearest node in the node layer to the current stop. Exclude
-    // centroids from being nearest features.
-    SetLayer(nlyr)
-    nearest_node_set = "nearest nodes"
-    opts = null
-    opts.[Source Not] = centroid_set
-    n = SelectNearestFeatures(
-      nearest_node_set, "several", slyr + "|" + current_stop_set,
-      threshold, opts
-    )
-    if n = 0 then slyr.missing_node = 1
-    else do
-      n_id = GetSetIDs(nlyr + "|" + nearest_node_set)
-      n_id = n_id[1]
-      slyr.Node_ID = n_id
-    end
-
-    SetLayer(slyr)
-    UnselectRecord(current_stop_set)
-    rh = GetNextRecord(slyr + "|" + route_stops, , )
-  end
-  DestroyProgressBar()*/
 
   // Read in the selected records to a data frame
   stop_df = CreateObject("df")
