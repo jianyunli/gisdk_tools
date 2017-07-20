@@ -762,7 +762,10 @@ Macro "Add Fields" (view, a_fields, a_initial_values)
     field_name = a_field[1]
     exists = "False"
     for s = 1 to a_str.length do
-      if a_str[s][1] = field_name then exists = "True"
+      if a_str[s][1] = field_name then do
+        exists = "True"
+        break
+      end
     end
 
     // If field does not exist, create it
