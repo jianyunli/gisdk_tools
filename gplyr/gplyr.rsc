@@ -1627,6 +1627,55 @@ Class "df" (tbl)
     return(ret)
   EndItem
 
+  /*
+  Sorts a dataframe based on one or more columns. Only ascending order
+  is supported.
+
+  Inputs
+    MacroOpts
+      Named array of macro arguments (e.g. MacroOpts.a_fields)
+
+      fields
+        String or array of strings
+        Names of fields to sort by
+  */
+
+  Macro "arrange" (MacroOpts) do
+
+    // Argument extraction
+    fields = MacroOpts.fields
+
+    // Argument checking
+    if fields = null then Throw("arrange: 'fields' not provided")
+    if TypeOf(fields) = "string" then fields = {fields}
+
+    // The SortSet() function wants a long string. Convert the array
+    fields_string = fields[1]
+    for f = 2 to fields.length do
+      fields_string = fields_string + ", " + fields[f]
+    end
+
+    // Create a set of all records to be sorted
+    {view, file} = self.create_view()
+    SetView(view)
+    cols = self.colnames()
+    first_col = cols[1]
+    qry = "Select * where nz(" + first_col + ") >= 0"
+    SelectByQuery("set", "several", qry)
+
+    // Sort the selection set using the string of fields
+    SortSet("set", fields_string)
+
+    // Reading in a sorted view won't respect the sort order. Must write
+    // out to a new bin file and read back in.
+    temp_file = GetTempFileName("*.bin")
+    ExportView(view + "|set", "FFB", temp_file, , )
+    CloseView(view)
+
+    self.tbl = null
+    self.read_bin(temp_file, )
+  EndItem
+
 endClass
 
 
