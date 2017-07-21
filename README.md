@@ -54,43 +54,44 @@ By default, the data frame is created empty, and one of the input methods below 
 This section provides a simple list of methods to give an idea of what is available.  A wiki will be created to provide proper documentation and examples for each method.
 
 ### Reading / Input
-read_view
-read_csv
-read_bin
-read_mtx
+read_view  
+read_csv  
+read_bin  
+read_mtx  
 copy
 
 ### Writing / Output
-update_view
-update_csv
-update_bin
-write_csv
-write_bin
-create_view
+update_view  
+update_csv  
+update_bin  
+write_csv  
+write_bin  
+create_view  
 create_editor
 
 ### Manipulation
-select
-mutate
-rename
-remove
-group_by
-summarize
-filter
-left_join
-unite
-separate
-spread
-gather
-bind_rows
-bin_field
+select  
+mutate  
+rename  
+remove  
+group_by  
+summarize  
+filter  
+left_join  
+unite  
+separate  
+spread  
+gather  
+bind_rows  
+bin_field  
+arrange
 
 ### Utility
-is_empty
-nrow
-ncol
-colnames
-check
-check_name
-in
+is_empty  
+nrow  
+ncol  
+colnames  
+check  
+check_name  
+in  
 unique
