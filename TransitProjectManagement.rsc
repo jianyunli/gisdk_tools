@@ -140,7 +140,7 @@ Macro "Create Scenario Route System" (MacroOpts)
   opts = null
   opts.rts_file = master_rts
   opts.v_pid = v_pid
-  v_rid = RunMacro("Convert ProjID to RouteID", opts)
+  {v_rid, } = RunMacro("Convert ProjID to RouteID", opts)
 
   // Open the route's stop dbd and add the scen_hwy
   master_stops_dbd = Substitute(master_rts_copy, ".rts", "S.dbd", )
@@ -405,6 +405,18 @@ Macro "Check Scenario Route System" (MacroOpts)
   opts.rts_file = master_rts_copy
   master_hwy_copy = RunMacro("Get RTS Highway File", opts)
 
+  // Get project IDs from the project list and convert to route ids on both
+  // the master and scenario route systems.
+  proj_df = CreateObject("df")
+  proj_df.read_csv(proj_list)
+  v_pid = proj_df.get_vector("ProjID")
+  opts = null
+  opts.rts_file = master_rts_copy
+  opts.v_pid = v_pid
+  {v_rid_m, v_rev_pid} = RunMacro("Convert ProjID to RouteID", opts)
+  opts.rts_file = output_rts_file
+  {v_rid_s, } = RunMacro("Convert ProjID to RouteID", opts)
+
   // Summarize the number of missing nodes by route. In order to have
   // all the fields in one table, you have to open the RTS file, which
   // links multiple tables together.
@@ -427,30 +439,37 @@ Macro "Check Scenario Route System" (MacroOpts)
   opts = null
   opts.file = output_rts_file
   {scen_map, {rlyr_s, slyr_s, , , llyr_s}} = RunMacro("Create Map", opts)
-  v_pid = GetDataVector(rlyr_s + "|", "ProjID", )
 
   // Compare route lengths between master and scenario
   data = null
-  for pid in v_pid do
+  for i = 1 to v_rev_pid.length do
+    pid = v_rev_pid[i]
+    rid_m = v_rid_m[i]
+    rid_s = v_rid_s[i]
+
     // Calculate the route length in the master rts
     opts = null
     opts.rlyr = rlyr_m
     opts.llyr = llyr_m
-    opts.pid = pid
+    opts.lookup_field = "Route_ID"
+    opts.id = rid_m
     length_m = RunMacro("Get Route Length", opts)
     // Calculate the route length in the scenario rts
     opts = null
     opts.rlyr = rlyr_s
     opts.llyr = llyr_s
-    opts.pid = pid
+    opts.lookup_field = "Route_ID"
+    opts.id = rid_s
     length_s = RunMacro("Get Route Length", opts)
 
     // calculate difference and percent difference
     diff = length_s - length_m
-    pct_diff = diff / length_m
+    pct_diff = round(diff / length_m * 100, 2)
 
     // store this information in a named array
-    data.ProjID = data.ProjID + {pid}
+    data.projid = data.projid + {pid}
+    data.master_route_id = data.master_route_id + {rid_m}
+    data.scenario_route_id = data.scenario_route_id + {rid_s}
     data.master_length = data.master_length + {length_m}
     data.scenario_length = data.scenario_length + {length_s}
     data.diff = data.diff + {diff}
@@ -464,20 +483,9 @@ Macro "Check Scenario Route System" (MacroOpts)
   // Convert the named array into a data frame
   length_df = CreateObject("df", data)
 
-  // Convert the project IDs into route IDs
-  opts = null
-  opts.rts_file = master_rts_copy
-  opts.v_pid = length_df.get_vector("ProjID")
-  v_rid = RunMacro("Convert ProjID to RouteID", opts)
-  length_df.mutate("Route_ID", v_rid)
-
   // Create the final data frame by joining the missing stops and length DFs
   final_df = length_df.copy()
-  final_df.left_join(stops_df, "Route_ID", "Route_ID")
-  final_df.select({
-    "ProjID", "Route_ID", "master_length", "scenario_length",
-    "diff", "pct_diff", "missing_node"
-  })
+  final_df.left_join(stops_df, "master_route_id", "Route_ID")
   final_df.rename("missing_node", "missing_stops")
   final_df.write_csv(out_dir + "/_rts_creation_results.csv")
 
@@ -507,10 +515,13 @@ Inputs
       Full path to the .rts file that contains both route and project IDs
 
     v_pid
-      Array or vector of project IDs
+      Array or vector of unique project IDs.
 
 Returns
-  A vector of route IDs corresponding to the input project IDs
+  An array of two vectors
+  A vector of route IDs corresponding to the input project IDs.
+  A revised vector of project IDs. If Project IDs are associated with more
+    than one route, the project ID will be repeated in this vector.
 */
 
 Macro "Convert ProjID to RouteID" (MacroOpts)
@@ -518,6 +529,14 @@ Macro "Convert ProjID to RouteID" (MacroOpts)
   // Argument extraction
   rts_file = MacroOpts.rts_file
   v_pid = MacroOpts.v_pid
+
+  // Check that the project IDs are unique
+  opts = null
+  opts.Unique = "true"
+  v_unique = SortVector(v_pid, opts)
+  if v_pid.length <> v_unique.length then Throw(
+    "'v_pid' must be a vector of unique values"
+  )
 
   // Create map of RTS
   opts = null
@@ -540,10 +559,13 @@ Macro "Convert ProjID to RouteID" (MacroOpts)
       Throw(string)
     end
   end
-  v_result = GetDataVector(rlyr + "|" + route_set, "Route_ID", )
+
+  // Get final results
+  v_rid = GetDataVector(rlyr + "|" + route_set, "Route_ID", )
+  v_rev_pid = GetDataVector(rlyr + "|" + route_set, "ProjID", )
 
   CloseMap(map)
-  return(v_result)
+  return({v_rid, v_rev_pid})
 EndMacro
 
 /*
@@ -563,9 +585,13 @@ MacroOpts
     String
     Name of the link layer
 
-  pid
-    Integer
-    Route ID
+  lookup_field
+    String
+    Field to search for the given ID
+
+  id
+    String or Integer
+    ID to look for in lookup_field
 
 Returns
   Length of route
@@ -576,18 +602,19 @@ Macro "Get Route Length" (MacroOpts)
   // Argument extraction
   rlyr = MacroOpts.rlyr
   llyr = MacroOpts.llyr
-  pid = MacroOpts.pid
+  lookup_field = MacroOpts.lookup_field
+  id = MacroOpts.id
 
   // Determine the current layer before doing work to set it back after the
   // macro finishes.
   cur_layer = GetLayer()
 
-  // Get route name based on the route id
+  // Get route name based on the lookup_field and id given
   SetLayer(rlyr)
   opts = null
   opts.Exact = "true"
-  rh = LocateRecord(rlyr + "|", "ProjID", {pid}, opts)
-  if rh = null then Throw("Route_ID not found")
+  rh = LocateRecord(rlyr + "|", lookup_field, {id}, opts)
+  if rh = null then Throw("Value not found in" + lookup_field)
   SetRecord(rlyr, rh)
   route_name = rlyr.Route_Name
 
