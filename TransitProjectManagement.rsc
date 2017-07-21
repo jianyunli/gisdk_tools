@@ -478,7 +478,7 @@ Macro "Check Scenario Route System" (MacroOpts)
     "ProjID", "Route_ID", "master_length", "scenario_length",
     "diff", "pct_diff", "missing_node"
   })
-  final_df.rename("missing_node", "missing_nodes")
+  final_df.rename("missing_node", "missing_stops")
   final_df.write_csv(out_dir + "/_rts_creation_results.csv")
 
 
