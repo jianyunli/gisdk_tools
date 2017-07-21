@@ -139,7 +139,7 @@ Macro "Create Scenario Route System" (MacroOpts)
   // Convert the project IDs into route IDs
   opts = null
   opts.rts_file = master_rts
-  opts.v_id = v_pid
+  opts.v_pid = v_pid
   v_rid = RunMacro("Convert ProjID to RouteID", opts)
 
   // Open the route's stop dbd and add the scen_hwy
@@ -467,7 +467,7 @@ Macro "Check Scenario Route System" (MacroOpts)
   // Convert the project IDs into route IDs
   opts = null
   opts.rts_file = master_rts_copy
-  opts.v_id = length_df.get_vector("ProjID")
+  opts.v_pid = length_df.get_vector("ProjID")
   v_rid = RunMacro("Convert ProjID to RouteID", opts)
   length_df.mutate("Route_ID", v_rid)
 
@@ -506,12 +506,8 @@ Inputs
       String
       Full path to the .rts file that contains both route and project IDs
 
-    v_id
-      Array or vector of project IDs (or route IDs if reverse = "true")
-
-    reverse
-      Optional String ("true"/"false")
-      Defaults to false. If true, converts route IDs into project IDs
+    v_pid
+      Array or vector of project IDs
 
 Returns
   A vector of route IDs corresponding to the input project IDs
@@ -521,10 +517,7 @@ Macro "Convert ProjID to RouteID" (MacroOpts)
 
   // Argument extraction
   rts_file = MacroOpts.rts_file
-  v_id = MacroOpts.v_id
-  reverse = MacroOpts.reverse
-
-  if reverse = null then reverse = "false"
+  v_pid = MacroOpts.v_pid
 
   // Create map of RTS
   opts = null
@@ -534,25 +527,20 @@ Macro "Convert ProjID to RouteID" (MacroOpts)
   // Convert project IDs into route IDs
   SetLayer(rlyr)
   route_set = "scenario routes"
-  for i = 1 to v_id.length do
-    id = v_id[i]
+  for i = 1 to v_pid.length do
+    id = v_pid[i]
 
+    // Select routes that match the current project id
     id = if TypeOf(id) = "string" then "'" + id + "'" else String(id)
-    qry = if reverse
-      then "Select * where Route_ID = " + id
-      else "Select * where ProjID = " + id
+    qry = "Select * where ProjID = " + id
     operation = if i = 1 then "several" else "more"
     n = SelectByQuery(route_set, operation, qry)
     if n = 0 then do
-      string = if reverse
-        then "Route with Route_ID = " + id + " not found in route layer."
-        else "Route with ProjID = " + id + " not found in route layer."
+      string = "Route with ProjID = " + id + " not found in route layer."
       Throw(string)
     end
   end
-  v_result = if reverse
-    then GetDataVector(rlyr + "|" + route_set, "ProjID", )
-    else GetDataVector(rlyr + "|" + route_set, "Route_ID", )
+  v_result = GetDataVector(rlyr + "|" + route_set, "Route_ID", )
 
   CloseMap(map)
   return(v_result)
