@@ -1632,18 +1632,12 @@ Class "df" (tbl)
   is supported.
 
   Inputs
-    MacroOpts
-      Named array of macro arguments (e.g. MacroOpts.a_fields)
-
-      fields
-        String or array of strings
-        Names of fields to sort by
+    fields
+      String or array of strings
+      Names of fields to sort by
   */
 
-  Macro "arrange" (MacroOpts) do
-
-    // Argument extraction
-    fields = MacroOpts.fields
+  Macro "arrange" (fields) do
 
     // Argument checking
     if fields = null then Throw("arrange: 'fields' not provided")
@@ -1660,7 +1654,7 @@ Class "df" (tbl)
     SetView(view)
     cols = self.colnames()
     first_col = cols[1]
-    qry = "Select * where nz(" + first_col + ") >= 0"
+    qry = "Select * where " + first_col + " <> null or " + first_col + " = null"
     SelectByQuery("set", "several", qry)
 
     // Sort the selection set using the string of fields
@@ -1973,6 +1967,15 @@ Macro "test gplyr"
     if df.tbl.test_col[a] <> answer[a] then Throw("test: update_bin() failed")
   end
 
+  // test arrange
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  df.arrange({"Color", "Count"})
+  answer = {25, 115, 50, 100, 35, 75}
+  result = df.get_vector("Count")
+  for a = 1 to answer.length do
+    if answer[a] <> result[a] then Throw("test: arrange() failed")
+  end
 
   ShowMessage("Passed Tests")
 EndMacro

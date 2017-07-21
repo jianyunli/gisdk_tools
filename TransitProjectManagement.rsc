@@ -241,9 +241,7 @@ Macro "Create Scenario Route System" (MacroOpts)
 
   // In order to draw routes to nodes in the right order, sort by
   // Route_ID and then mile post.
-  opts = null
-  opts.fields = {"Route_ID", "Milepost"}
-  stop_df.arrange(opts)
+  stop_df.arrange({"Route_ID", "Milepost"})
 
   // Create a table with the proper format to be read by TC's
   // create-route-from-table method. In TC6 help, this is called
