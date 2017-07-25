@@ -204,7 +204,7 @@ Macro "Create Scenario Route System" (MacroOpts)
   non_centroid_set = CreateSet("non-centroids")
   SetInvert(non_centroid_set, centroid_set)
 
-  // Perform a spatial join to match scenario nodes to master nodes.
+  // Perform a spatial join to match scenario nodes to master stops.
   opts = null
   opts.master_layer = slyr
   opts.master_set = route_stops
@@ -238,6 +238,15 @@ Macro "Create Scenario Route System" (MacroOpts)
   opts.view = slyr
   opts.set = route_stops
   stop_df.read_view(opts)
+
+  // shape_stop
+  // Some stops on the master rts can be marked as shape stops, which
+  // are used to improve the accuracy of the resulting route, but should
+  // not be assigned as stops. Handle those here.
+  v_shape_stop = stop_df.get_vector("shape_stop")
+  v_stop_flag = stop_df.get_vector("Stop_Flag")
+  v_stop_flag = if (v_shape_stop = 1) then 0 else 1
+  stop_df.mutate("Stop_Flag", v_stop_flag)
 
   // In order to draw routes to nodes in the right order, sort by
   // Route_ID and then mile post.

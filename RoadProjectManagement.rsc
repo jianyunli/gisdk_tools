@@ -66,9 +66,11 @@ Macro "Road Project Management" (MacroOpts)
   if master_dbd = null then Throw("'master_dbd' not provided")
 
   // Get vector of project IDs from the project list file
+  // gplyr's read functions won't work here until it can handle empty files.
   csv_tbl = OpenTable("tbl", "CSV", {proj_list, })
   v_projIDs = GetDataVector(csv_tbl + "|", "ProjID", )
   CloseView(csv_tbl)
+  DeleteFile(Substitute(proj_list, ".csv", ".DCC", ))
 
   // Open the highway dbd
   {nlyr, llyr} = GetDBLayers(hwy_dbd)
