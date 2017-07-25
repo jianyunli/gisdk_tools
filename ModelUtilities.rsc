@@ -745,6 +745,9 @@ Macro "Add Fields" (view, a_fields, a_initial_values)
   // Argument check
   if view = null then Throw("'view' not provided")
   if a_fields = null then Throw("'a_fields' not provided")
+  for field in a_fields do
+    if field = null then Throw("An element in the 'a_fields' array is missing")
+  end
   if a_initial_values <> null then do
     if TypeOf(a_initial_values) <> "array"
       then Throw("'a_initial_values' must be an array")
