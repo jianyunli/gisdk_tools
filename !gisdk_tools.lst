@@ -5,8 +5,8 @@ Generation.rsc
 HCMCapacity.rsc
 ModelUtilities.rsc
 Summaries.rsc
-net_tools/HighwayProjectManagement.rsc
-net_tools/TransitProjectManagement.rsc
-net_tools/load_counts.rsc
-net_tools/net_utilities.rsc
+network_tools/HighwayProjectManagement.rsc
+network_tools/TransitProjectManagement.rsc
+network_tools/load_counts.rsc
+network_tools/network_utilities.rsc
 gplyr/gplyr.rsc
