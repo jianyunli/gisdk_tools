@@ -242,11 +242,14 @@ Macro "Create Scenario Route System" (MacroOpts)
   // shape_stop
   // Some stops on the master rts can be marked as shape stops, which
   // are used to improve the accuracy of the resulting route, but should
-  // not be assigned as stops. Handle those here.
-  v_shape_stop = stop_df.get_vector("shape_stop")
-  v_stop_flag = stop_df.get_vector("Stop_Flag")
-  v_stop_flag = if (v_shape_stop = 1) then 0 else 1
-  stop_df.mutate("Stop_Flag", v_stop_flag)
+  // not be assigned as stops. Handle those here. Test to make sure the
+  // shape_stop field exists so as not to make this field a requirement.
+  if stop_df.in("shape_stop", stop_df.colnames()) then do
+    v_shape_stop = stop_df.get_vector("shape_stop")
+    v_stop_flag = stop_df.get_vector("Stop_Flag")
+    v_stop_flag = if (v_shape_stop = 1) then 0 else 1
+    stop_df.mutate("Stop_Flag", v_stop_flag)
+  end
 
   // In order to draw routes to nodes in the right order, sort by
   // Route_ID and then mile post.
