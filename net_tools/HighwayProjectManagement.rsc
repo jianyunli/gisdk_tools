@@ -54,7 +54,7 @@ This is because many application scenarios involve adding a project to the
 end of the project list to test it's effect.
 */
 
-Macro "Road Project Management" (MacroOpts)
+Macro "Highway Project Management" (MacroOpts)
 
   hwy_dbd = MacroOpts.hwy_dbd
   proj_list = MacroOpts.proj_list
