@@ -343,6 +343,10 @@ field_name Name of the field to remove. Can pass string or array of strings.
 */
 
 Macro "Drop Field" (viewName, field_name)
+  Throw("'Drop Field' is deprecated. The function is now called 'Remove Field'.")
+EndMacro
+
+Macro "Remove Field" (viewName, field_name)
   a_str = GetTableStructure(viewName)
 
   if TypeOf(field_name) = "string" then field_name = {field_name}
