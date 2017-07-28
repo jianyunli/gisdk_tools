@@ -160,12 +160,11 @@ Macro "Add Link" (MacroOpts)
 EndMacro
 
 /*
-Given a count point and the array of shape points returned by
-GetLine() for the nearest line segment, return the azimuth/heading
-of the nearest 2 shape points.
+Given a point and the array of shape points returned by GetLine() for the
+nearest line segment, return the azimuth/heading of the nearest 2 shape points.
 
 Inputs
-  count_point
+  point
     Coordinate
     Coordinate of the count point
 
@@ -173,15 +172,15 @@ Inputs
     Array of coordinates returned by GetLine()
 */
 
-Macro "Get Local Azimuth" (count_point, line_points)
+Macro "Get Local Azimuth" (point, line_points)
 
-  // Determine the two shape points nearest to the count_point
+  // Determine the two shape points nearest to the point
   a_dist = {999999999, 999999999}
   dim a_pts[2]
   for p = 1 to line_points.length do
     line_point = line_points[p]
 
-    dist = GetDistance(count_point, line_point)
+    dist = GetDistance(point, line_point)
     if dist < a_dist[1] then do
       a_dist[2] = a_dist[1]
       a_pts[2] = a_pts[1]
