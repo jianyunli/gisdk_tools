@@ -5,10 +5,18 @@ running GISDK models.
 
 /*
 This macro clears the workspace.
-It also cleans up DCC files created from csv tables.
+Optionally, it also cleans up DCC files created from csv tables.
+
+Inputs
+  scen_dir
+    Optional String
+    Full path to the scenario directory. If provided, the macro will clear
+    any DCC files in the directory (and all sub directories). If null, the macro
+    will look for a global MODELARGS.scen_dir variable. If neither are present,
+    then the DCC file cleaning step does not occur.
 */
 
-Macro "Close All"
+Macro "Close All" (scen_dir)
 
   // Close maps
   maps = GetMapNames()
@@ -32,10 +40,12 @@ Macro "Close All"
   end
 
   // Delete any DCC files in the scenario folder
-  // This requires the global variable MODELARGS be established in
-  // your project code, but will simply do nothing if it doesn't exist.
-  if MODELARGS.scen_dir <> null then do
-    a_files = RunMacro("Catalog Files", MODELARGS.scen_dir, {"DCC"})
+  // if scen_dir is passed to the function, then use it. If not, look for
+  // the global variable MODELARGS (that should be established in
+  // your project code). If neither exists, do nothing.
+  if scen_dir = null then scen_dir = MODELARGS.scen_dir
+  if scen_dir <> null then do
+    a_files = RunMacro("Catalog Files", scen_dir, {"DCC"})
     for f = 1 to a_files.length do
       DeleteFile(a_files[f])
     end
