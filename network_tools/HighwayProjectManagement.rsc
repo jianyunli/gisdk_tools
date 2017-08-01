@@ -469,12 +469,12 @@ Macro "Delete Empty Project Groups" (llyr)
     qry = "Select * where " + pgroup + "ID <> null"
     n = SelectByQuery("sel", "several", qry)
     if nz(n) = 0 then do
-      RunMacro("Drop Field", llyr, pgroup + "ID")
+      RunMacro("Remove Field", llyr, pgroup + "ID")
       for a = 1 to attrList.length do
         attr = attrList[a]
 
         field_name = pgroup + attr
-        RunMacro("Drop Field", llyr, pgroup + attr)
+        RunMacro("Remove Field", llyr, pgroup + attr)
       end
     end
   end

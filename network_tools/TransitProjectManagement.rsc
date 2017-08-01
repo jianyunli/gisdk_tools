@@ -230,7 +230,7 @@ Macro "Create Scenario Route System" (MacroOpts)
     SetDataVector(slyr + "|" + set, "missing_node", v, )
     DeleteSet(set)
   end
-  RunMacro("Drop Field", slyr, {"slave_id", "slave_dist"})
+  RunMacro("Remove Field", slyr, {"slave_id", "slave_dist"})
 
   // Read in the selected records to a data frame
   stop_df = CreateObject("df")

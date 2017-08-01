@@ -139,7 +139,7 @@ Macro "Count Difference Map" (macro_opts)
     cur_field = a_fields[f][1]
 
     new_field = cur_field + field_suffix
-    RunMacro("Drop Field", vw, new_field)
+    RunMacro("Remove Field", vw, new_field)
     RunMacro("Rename Field", vw, cur_field, new_field)
   end
 
@@ -439,12 +439,12 @@ Summaries include VMT, VHT, space mean speed, and delay.
 
 MacroOpts
   Named array holding all arguments (e.g. MacroOpts.hwy_dbd)
-  
+
   hwy_dbd
     String
     Full path of the line geographic file of highway links. This should be the
     "loaded" network, such that the assignment results are included.
-  
+
   output_dir
     String
     Full path of output directory where the final csv will be written
@@ -453,7 +453,7 @@ MacroOpts
     String
     Field name containing area type information
     Defaults to "AreaType"
-    
+
   ft_field
     String
     Field name containing facility type information
@@ -473,18 +473,18 @@ Macro "Link Summary by FT and AT" (MacroOpts)
   at_field = MacroOpts.at_field
   ft_field = MacroOpts.ft_field
   summary_fields = MacroOpts.summary_fields
-  
+
   // Default values
   if at_field = null then at_field = "AreaType"
   if ft_field = null then ft_field = "HCMType"
   if summary_fields = null then do
     summary_fields = {"Flow_Daily", "VMT_Daily", "VHT_Daily", "Delay_Daily"}
   end
-  
+
   // Argument checks
   if hwy_dbd = null then Throw("'hwy_dbd' not provided")
   if output_dir = null then Throw("'output_dir' not provided")
-  
+
   // Open the highway link layer and read into a data frame
   {nlyr, llyr} = GetDBLayers(hwy_dbd)
   AddLayerToWorkspace(llyr, hwy_dbd, llyr)
@@ -493,7 +493,7 @@ Macro "Link Summary by FT and AT" (MacroOpts)
   opts.view = llyr
   opts.fields = {ft_field, at_field} + summary_fields
   hwy_df.read_view(opts)
-  
+
   // Summarize by ft and at
   hwy_df.group_by({ft_field, at_field})
   agg = null

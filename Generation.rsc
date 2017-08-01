@@ -30,7 +30,7 @@ Appends marginal distributions to the se table
 
 Depends:
 ModelUtilities.rsc  "Perma Join"
-                    "Drop Field"
+                    "Remove Field"
 */
 
 Macro "HH Marginal Creation" (MacroOpts)
@@ -81,7 +81,7 @@ Macro "HH Marginal Creation" (MacroOpts)
     // Before joining, delete any category fields that might exist
     // from a previous run.
     se_tbl = OpenTable("se", "FFB", {MacroOpts.se_bin})
-    RunMacro("Drop Field", se_tbl, a_catnames)
+    RunMacro("Remove Field", se_tbl, a_catnames)
 
     // Calculate an average field in order to join the marginal table
     // For example, if the current marginal is workers, calculate
@@ -101,8 +101,8 @@ Macro "HH Marginal Creation" (MacroOpts)
     CloseView(se_tbl)
     RunMacro("Perma Join", MacroOpts.se_bin, "mavg", tblFile, "avg")
     se_tbl = OpenTable("se", "FFB", {MacroOpts.se_bin})
-    RunMacro("Drop Field", se_tbl, "mavg")
-    RunMacro("Drop Field", se_tbl, "avg")
+    RunMacro("Remove Field", se_tbl, "mavg")
+    RunMacro("Remove Field", se_tbl, "avg")
 
     // Convert the category fields in the se table from percents
     // to households by multiplying by the household field.

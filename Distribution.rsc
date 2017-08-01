@@ -353,8 +353,8 @@ Macro "Destination Choice" (MacroOpts)
 
   // Clean up workspace
   se_tbl = OpenTable("se", "FFB", {se_bin})
-  RunMacro("Drop Field", se_tbl, "dc_size")
-  RunMacro("Drop Field", se_tbl, "shadow_price")
+  RunMacro("Remove Field", se_tbl, "dc_size")
+  RunMacro("Remove Field", se_tbl, "shadow_price")
   CloseView(se_tbl)
   DeleteFile(marginal_bin)
   DeleteFile(Substitute(marginal_bin, ".bin", ".DCB", ))

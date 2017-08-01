@@ -613,7 +613,7 @@ Macro "Perma Join" (masterFile, mID, slaveFile, sID, overwrite)
     for f = 1 to a_sFields.length do
       field = a_sFields[f]
       if field <> sID & ArrayPosition(a_mFields, {field}, ) <> 0
-        then RunMacro("Drop Field", master, field)
+        then RunMacro("Remove Field", master, field)
     end
   end
 
@@ -639,8 +639,8 @@ Macro "Perma Join" (masterFile, mID, slaveFile, sID, overwrite)
     JoinTableToLayer(masterFile, master, "FFB", tempBIN, tempDCB, mID, opts)
     master = AddLayerToWorkspace(master, masterFile, master)
     nlyr = AddLayerToWorkspace(nlyr, masterFile, nlyr)
-    RunMacro("Drop Field", master, "Length:1")
-    RunMacro("Drop Field", master, "Dir:1")
+    RunMacro("Remove Field", master, "Length:1")
+    RunMacro("Remove Field", master, "Dir:1")
 
     // Re-export the table to clean up the bin file
     new_dbd = a_path[1] + a_path[2] + a_path[3] + "_temp" + a_path[4]
@@ -659,7 +659,7 @@ Macro "Perma Join" (masterFile, mID, slaveFile, sID, overwrite)
 
     // Remove the sID field
     master = AddLayerToWorkspace(master, masterFile, master)
-    RunMacro("Drop Field", master, sID)
+    RunMacro("Remove Field", master, sID)
     DropLayerFromWorkspace(master)
 
     // Delete the temp binary files
@@ -674,7 +674,7 @@ Macro "Perma Join" (masterFile, mID, slaveFile, sID, overwrite)
 
     // Remove the sID field
     view = OpenTable("view", "FFB", {masterFile})
-    RunMacro("Drop Field", view, sID)
+    RunMacro("Remove Field", view, sID)
     CloseView(view)
   end
 
