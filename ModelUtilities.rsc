@@ -1264,8 +1264,9 @@ Macro "Create Map" (MacroOpts)
     map_name = CreateMap(map_name, opts)
     if minimized then MinimizeWindow(GetWindowName())
     for layer in a_layers do
-      AddLayer(map_name, layer, file, layer)
-      RunMacro("G30 new layer default settings", layer)
+      l = AddLayer(map_name, layer, file, layer)
+      RunMacro("G30 new layer default settings", l)
+      actual_layers = actual_layers + {l}
     end
   end
 
@@ -1283,13 +1284,14 @@ Macro "Create Map" (MacroOpts)
     if minimized then MinimizeWindow(GetWindowName())
     {, , opts} = GetRouteSystemInfo(file)
     rlyr = opts.Name
-    a_layers = AddRouteSystemLayer(map, rlyr, file, )
-    for layer in a_layers do
-      RunMacro("G30 new layer default settings", layer)
+    actual_layers = AddRouteSystemLayer(map, rlyr, file, )
+    for layer in actual_layers do
+      // Check for null - the physcial stops layer is often null
+      if layer <> null then RunMacro("G30 new layer default settings", layer)
     end
   end
 
-  return({map_name, a_layers})
+  return({map_name, actual_layers})
 EndMacro
 
 /*
