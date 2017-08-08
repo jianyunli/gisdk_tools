@@ -146,7 +146,7 @@ dBox "Main" location: x, y
 	enditem
 
   // Link to GitHub
-  button 45, 0 icon: git_hub_image do
+  button 45, 0 icon: git_hub_image help: "GitHub Link" do
     message = "(If repository is private, you must be a</br>" +
       "collaborator and log in to GitHub to view)<p>"
     message = message + "<a href='https://github.com/pbsag/HickoryNC/wiki' "
@@ -193,6 +193,8 @@ dBox "Main" location: x, y
     RunMacro("Init MODELARGS", scen_dir)
     ok = RunDbox("Scenario Settings")
     if !ok then scen_dir = null
+      // re-run init to capture any changes to scenario settings
+      else RunMacro("Init MODELARGS", scen_dir)
 
     nodir:
     on error, notfound, escape default
@@ -476,7 +478,7 @@ dBox "Scenario Settings" location: x, y Title: "Scenario Settings"
     if GetFileInfo(proj_list_file) then proj_list = "True" else proj_list = "False"
 
     // If the project list exists, read IDs (for display only).
-    // Otherwise, create it and show message.
+    // Otherwise, create it.
     if proj_list then do
       csv_tbl = OpenTable("tbl", "CSV", {proj_list_file, })
       v_projIDs = GetDataVector(csv_tbl + "|", "ProjID", )
@@ -486,11 +488,6 @@ dBox "Scenario Settings" location: x, y Title: "Scenario Settings"
       file = OpenFile(proj_list_file, "w")
       WriteLine(file, "ProjID")
       CloseFile(file)
-      ShowMessage(
-        "HighwayProjectList.csv has been created in this folder.\n" +
-        "This CSV table needs a single field named 'ProjID' filled\n" +
-        "with project IDs.  It is created with no projects included."
-      )
     end
 
     // if the config file exists, read it into Settings array
@@ -557,7 +554,15 @@ dBox "Scenario Settings" location: x, y Title: "Scenario Settings"
   // List of project IDs
   text 73, 0 variable: "Project List"
   button 84, same, 3 Prompt: " ? " do
-    ShowMessage("Shows contents of the HighwayProjectList.csv")
+    message = "Shows contents of the HighwayProjectList.csv.</br>" +
+      "For more help, see the wiki:<p>"
+    message = message + "<a href='https://github.com/pbsag/gisdk_tools/wiki/Highway-Manager#highwayprojectlistcsv' "
+    + "target=\"new window\">https://github.com/pbsag/gisdk_tools/wiki/Highway-Manager#highwayprojectlistcsv</a>"
+
+    Opts = null
+    Opts.title = "Highway Project Management"
+    Opts.message = message
+    RunDbox("confirm dbox with browser", Opts)
   EndItem
   Scroll List 73, after, 15, 6 List: V2A(v_projIDs)
 
