@@ -50,6 +50,11 @@ This macro runs a single scenario to convergence.
 
 Unlike standard practice models, this macro performs feedback independently
 for each time period.
+
+Returns
+  congerved
+    "True" or "False"
+    If the model converged.
 */
 Macro "Full Model Run"
   global MODELARGS
@@ -92,6 +97,7 @@ Macro "Full Model Run"
 
   /*RunMacro("Summaries")*/
   RunMacro("Close All")
+  return(converged)
 EndMacro
 
 /*
@@ -208,12 +214,16 @@ dBox "Main" location: x, y
     RunMacro("Close All")
     CreateProgressBar("placeholder", )
     CreateStopwatch("run_time")
-    RunMacro("Full Model Run")
+    converged = RunMacro("Full Model Run")
     time = round(CheckStopwatch("run_time") / 3600, 2)
     DestroyStopwatch("run_time")
     DestroyProgressBar()
+    converged_string = if converged
+      then "Model converged successfully\n"
+      else "Model did not converge before hitting max iterations\n"
     ShowMessage(
       "Full Model Run Complete\n" +
+      converged_string +
       "Run Time: " + String(time) + " hours"
     )
   EndItem
