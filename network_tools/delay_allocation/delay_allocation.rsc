@@ -1,8 +1,45 @@
+/*
+Delay Allocation Method
+
+Throughout this code, "_b" will refer to the build layer and "_nb" to no-build.
+*/
+
+Macro "delay_allocation" (MacroOpts)
+  shared MacroOpts
+
+  CreateProgressBar("Delay Allocation", "True")
+
+  // Steps
+  RunMacro("da create variables")
+  RunMacro("da initial calculations")
+
+  DestroyProgressBar()
+EndMacro
+
+/*
+Adds variables to MacroOpts that will be used my multiple macros
+*/
+
+Macro "da create variables"
+  shared MacroOpts
+
+EndMacro
+
+/*
+
+*/
+
+Macro "da initial calculations"
+  shared MacroOpts
+
+  // Extract arguments
+EndMacro
+
 // Previous code implementing delay allocation method
 
 Macro "old"
 
-    CreateProgressBar("Calculating Benfeits", "True")
+
 
     // Create the output directory
     path = SplitPath(Args.Benefits.allBuildHwy)
