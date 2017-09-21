@@ -2,6 +2,7 @@
 Delay Allocation Method
 
 Throughout this code, "_b" will refer to the build layer and "_nb" to no-build.
+"_o" will refer to the output.
 */
 
 Macro "delay_allocation" (MacroOpts)
@@ -23,6 +24,7 @@ Adds variables to MacroOpts that will be used my multiple macros
 Macro "da create variables"
   shared MacroOpts
 
+  MacroOpts.hwy_o = output_dir + "delay_allocation.dbd"
 EndMacro
 
 /*
@@ -33,7 +35,40 @@ Macro "da initial calculations"
   shared MacroOpts
 
   // Extract arguments
+  hwy_b = MacroOpts.hwy_b
+  hwy_o = MacroOpts.hwy_o
+  output_dir = MacroOpts.output_dir
+
+  // Create the output directory
+  if GetDirectoryInfo(output_dir, "All") = null then CreateDirectory(output_dir)
+
+  // Create a copy of the all-build dbd without centroid connectors
+  // (Exporting is much faster than copying and deleting links)
+  {nlyr_b, llyr_b} = GetDBLayers(hwy_b)
+  llyr_b = AddLayerToWorkspace(llyr_b, hwy_b, llyr_b)
+  SetLayer(llyr_b)
+  ccClass = if TypeOf(Args.General.ccClass) = "string"
+    then "'" + Args.General.ccClass + "'"
+    else String(Args.General.ccClass)
+  qry = "Select * where " + Args.General.fClass + " <> " + ccClass
+  SelectByQuery("to_export", "Several", qry)
+  opts = null
+  {, opts.[Field Spec]} = GetFields(llyr_b, "All")
+  ExportGeography(llyr_b + "|to_export", hwy_o, opts)
+  DropLayerFromWorkspace(llyr_b)
+
+  // Open the result highway layer
+  {nlyr_o, llyr_o} = GetDBLayers(hwy_o)
+  llyr_o = AddLayerToWorkspace(llyr_o, hwy_o, llyr_o)
+
+  // Join the nobuild layer to the result layer
+  {nlyr_nb, llyr_nb} = GetDBLayers(hwy_nb)
+  llyr_nb = AddLayerToWorkspace(llyr_nb, hwy_nb, llyr_nb)
+  dv_join = JoinViews("build+nobuild", llyr_nb + ".ID", noBuildLayer+".ID", )
+  SetView(dv_join)
+
 EndMacro
+
 
 // Previous code implementing delay allocation method
 
@@ -41,42 +76,7 @@ Macro "old"
 
 
 
-    // Create the output directory
-    path = SplitPath(Args.Benefits.allBuildHwy)
-    Args.Benefits.outputDir = path[1] + path[2] + "\\BenefitCalculation\\"
-    on error goto skipfolder
-    CreateDirectory(Args.Benefits.outputDir)
-    skipfolder:
-    on error default
 
-    // Create a copy of the all-build dbd without centroid connectors
-    // (Exporting is much faster than copying and deleting links)
-    Args.Benefits.resultHwy = Args.Benefits.outputDir + "BenefitCalculation.dbd"
-    {nlayer, llayer} = GetDBLayers(Args.Benefits.allBuildHwy)
-    llayer = AddLayerToWorkspace(llayer, Args.Benefits.allBuildHwy, llayer)
-    SetLayer(llayer)
-    ccClass = if TypeOf(Args.General.ccClass) = "string"
-      then "'" + Args.General.ccClass + "'"
-      else String(Args.General.ccClass)
-    qry = "Select * where " + Args.General.fClass + " <> " + ccClass
-    n = SelectByQuery("non-CCs", "Several", qry)
-    opts = null
-    {, opts.[Field Spec]} = GetFields(llayer, "All")
-    ExportGeography(llayer + "|non-CCs", Args.Benefits.resultHwy, opts)
-    DropLayerFromWorkspace(llayer)
-
-    // Open the result highway layer
-    {nlayer, llayer} = GetDBLayers(Args.Benefits.resultHwy)
-    llayer = AddLayerToWorkspace(llayer, Args.Benefits.resultHwy, llayer)
-
-    // In this code "ab" and "nb" stand for "all build" and "no build"
-    // Directionality (AB/BA) will be capitalized to avoid confusion
-
-    // Join the nobuild layer to the result layer
-    a_noBuildLayers = GetDBLayers(Args.Benefits.noBuildHwy)
-    noBuildLayer = AddLayerToWorkspace(a_noBuildLayers[2],Args.Benefits.noBuildHwy,a_noBuildLayers[2])
-    dv_join = JoinViews("allbuild+nobuild",llayer+".ID",noBuildLayer+".ID",)
-    SetView(dv_join)
 
     // Collect projID, vol, cap, and time measures
     // (convert any nulls to zeros)
@@ -163,7 +163,7 @@ Macro "old"
 
     // Check calculation in debug mode
     if Args.General.debug = 1 then do
-      csvFile = Args.Benefits.outputDir + "delay discount check.csv"
+      csvFile = output_dir + "delay discount check.csv"
       file = OpenFile(csvFile,"w")
       WriteLine(file,"  ,,No Build,        ,            ,            ,                   ,                   ,,All Build,       ,            ,            ,                   ,                   ")
       WriteLine(file,"ID,,AB Delay,BA Delay,AB Max Delay,BA Max Delay,AB Discounted Delay,BA Discounted Delay,,AB Delay,BA Delay,AB Max Delay,BA Max Delay,AB Discounted Delay,BA Discounted Delay")
@@ -303,9 +303,9 @@ Macro "old"
 
     // Check calculation in debug mode
     if Args.General.debug = 1 then do
-      path = SplitPath(Args.Benefits.allBuildHwy)
-      Args.Benefits.outputDir = path[1] + path[2] + "\\BenefitCalculation\\"
-      testCSV = Args.Benefits.outputDir + "TestLinkCategoryLogic.csv"
+      path = SplitPath(hwy_b)
+      output_dir = path[1] + path[2] + "\\BenefitCalculation\\"
+      testCSV = output_dir + "TestLinkCategoryLogic.csv"
       file = OpenFile(testCSV,"w")
       WriteLine(file,"ProjID,nbCap,totDelayDiff,totCapDiff,totVolDiff,Type,abCapRatio,baCapRatio,abVolRatio,baVolRatio,abPrimBen,baPrimBen,abSecBen,baSecBen")
       for i = 1 to v_linkCategory.length do
@@ -332,9 +332,9 @@ Macro "old"
 
     // Modify the structure of the result hwy file
     // to add benefit-related fields
-    {nlayer, llayer} = GetDBLayers(Args.Benefits.resultHwy)
+    {nlayer, llayer} = GetDBLayers(hwy_o)
     dv_temp = AddLayerToWorkspace(
-      llayer, Args.Benefits.resultHwy, llayer,
+      llayer, hwy_o, llayer,
     )
     strct = GetTableStructure(dv_temp)
     for i = 1 to strct.length do
@@ -425,12 +425,12 @@ Macro "old"
     DropLayerFromWorkspace(dv_temp)
 
     // Create a map of the resulting highway layer
-    {map,nlayer,llayer} = RunMacro("Create Highway Map", Args.Benefits.resultHwy)
+    {map,nlayer,llayer} = RunMacro("Create Highway Map", hwy_o)
     SetLayer(llayer)
 
     // Create a distance skim matrix from every node to every node
     Opts = null
-    Opts.Input.[Link Set] = {Args.Benefits.resultHwy + "|" + llayer, llayer}
+    Opts.Input.[Link Set] = {hwy_o + "|" + llayer, llayer}
     Opts.Global.[Network Label] = "network"
     Opts.Global.[Network Options].[Turn Penalties] = "Yes"
     Opts.Global.[Network Options].[Keep Duplicate Links] = "FALSE"
@@ -439,21 +439,21 @@ Macro "old"
     Opts.Global.[Link Options].Length = {llayer + ".Length", llayer + ".Length", , , "False"}
     Opts.Global.[Length Units] = "Miles"
     Opts.Global.[Time Units] = "Minutes"
-    net_file = Args.Benefits.outputDir + "/network.net"
+    net_file = output_dir + "/network.net"
     Opts.Output.[Network File] = net_file
     ret = RunMacro("TCB Run Operation", "Build Highway Network", Opts, &Ret)
 
     Opts = null
     Opts.Input.Network = net_file
-    Opts.Input.[Origin Set] = {Args.Benefits.resultHwy + "|" + nlayer, nlayer}
-    Opts.Input.[Destination Set] = {Args.Benefits.resultHwy + "|" + nlayer, nlayer}
-    Opts.Input.[Via Set] = {Args.Benefits.resultHwy + "|" + nlayer, nlayer}
+    Opts.Input.[Origin Set] = {hwy_o + "|" + nlayer, nlayer}
+    Opts.Input.[Destination Set] = {hwy_o + "|" + nlayer, nlayer}
+    Opts.Input.[Via Set] = {hwy_o + "|" + nlayer, nlayer}
     Opts.Field.Minimize = "Length"
     Opts.Field.Nodes = nlayer + ".ID"
     Opts.Flag = {}
     Opts.Output.[Output Matrix].Label = "Shortest Path"
     Opts.Output.[Output Matrix].Compression = 1
-    mtx_file = Args.Benefits.outputDir + "distance.mtx"
+    mtx_file = output_dir + "distance.mtx"
     Opts.Output.[Output Matrix].[File Name] = mtx_file
     ret = RunMacro("TCB Run Procedure", "TCSPMAT", Opts, &Ret)
 
@@ -650,7 +650,7 @@ Macro "old"
         // To check/debug the distance table calculations
         if p = 1 and i = 1
           then RunMacro(
-            "Write Table", DIST, Args.Benefits.outputDir +
+            "Write Table", DIST, output_dir +
             "/check distance calc - proj 1 link 1.csv"
           )
 
@@ -735,7 +735,7 @@ Macro "old"
 
     // Use the tables library to vectorize and write out DATA
     /*DATA = RunMacro("Vectorize Table", DATA)
-    RunMacro("Write Table", DATA, Args.Benefits.outputDir + "test.csv")*/
+    RunMacro("Write Table", DATA, output_dir + "test.csv")*/
 
     // Use the tables library to apportion benefits
     agg = null
@@ -760,7 +760,7 @@ Macro "old"
     // Write out intermediate table for checking
     RunMacro(
       "Write Table", FINAL,
-      Args.Benefits.outputDir + "check secondary benefit assignment.csv"
+      output_dir + "check secondary benefit assignment.csv"
     )
 
     agg = null
@@ -826,7 +826,7 @@ Macro "old"
 
     RunMacro(
       "Write Table", RESULT,
-      Args.Benefits.outputDir + "final results.csv"
+      output_dir + "final results.csv"
     )
 
     // Show warning if the delay increased from no-build to build
