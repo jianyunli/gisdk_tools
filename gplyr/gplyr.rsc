@@ -1678,8 +1678,6 @@ Class "df" (tbl)
 
 endClass
 
-
-
 /*
 Unit test macro
 Runs through all the methods and writes out results. To use this macro, either:

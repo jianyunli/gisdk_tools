@@ -1,19 +1,22 @@
 /*
 Delay Allocation Method
 
-Throughout this code, "_b" will refer to the build layer and "_nb" to no-build.
-"_o" will refer to the output.
+Throughout this code, variables with suffix "_b" will refer to the build layer
+and "_nb" to no-build. "_o" will refer to the output.
 */
 
-Macro "delay_allocation" (MacroOpts)
+Macro "Delay Allocation" (Args)
   shared MacroOpts
+  MacroOpts = Args // handles GISDK memory error
 
+  RunMacro("Close All")
   CreateProgressBar("Delay Allocation", "True")
 
   // Steps
   RunMacro("da create variables")
   RunMacro("da initial calculations")
 
+  RunMacro("Close All")
   DestroyProgressBar()
 EndMacro
 
@@ -24,7 +27,8 @@ Adds variables to MacroOpts that will be used my multiple macros
 Macro "da create variables"
   shared MacroOpts
 
-  MacroOpts.hwy_o = MacroOpts.output_dir + "delay_allocation.dbd"
+  // output highway file
+  MacroOpts.hwy_o = MacroOpts.output_dir + "/delay_allocation.dbd"
 EndMacro
 
 /*
@@ -37,8 +41,18 @@ Macro "da initial calculations"
   // Extract arguments
   hwy_b = MacroOpts.hwy_b
   hwy_nb = MacroOpts.hwy_nb
-  hwy_o = MacroOpts.hwy_o
+  param_file = MacroOpts.param_file
   output_dir = MacroOpts.output_dir
+  hwy_o = MacroOpts.hwy_o
+
+  // Argument check
+  if hwy_b = null then Throw("Delay Allocation: 'hwy_b' is missing")
+  if hwy_nb = null then Throw("Delay Allocation: 'hwy_nb' is missing")
+  if param_file = null then Throw("Delay Allocation: 'param_file' is missing")
+  if output_dir = null then Throw("Delay Allocation: 'output_dir' is missing")
+
+  // Read the parameter table
+  params = RunMacro("Read Parameter File", param_file)
 
   // Create the output directory
   if GetDirectoryInfo(output_dir, "All") = null then CreateDirectory(output_dir)
@@ -1007,4 +1021,16 @@ change to the repo.
 Macro "da unit test"
 
   test_dir = "Y:\\projects/gisdk_tools/repo/network_tools/delay_allocation/unit_test"
+
+  opts = null
+  opts.hwy_b = test_dir + "/build_network/build.dbd"
+  opts.hwy_nb = test_dir + "/nobuild_network/nobuild.dbd"
+  opts.param_file = test_dir + "/parameters.csv"
+  opts.output_dir = test_dir + "/output"
+  RunMacro("Delay Allocation", opts)
+
+  // Delete the output folder after checking results
+  RunMacro("Delete Directory", opts.output_dir)
+
+  ShowMessage("Passed Tests")
 EndMacro
