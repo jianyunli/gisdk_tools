@@ -508,6 +508,9 @@ Class "df" (tbl)
     fields
       Optional string or array/vector of strings
       Array/Vector of columns to read. If null, all columns are read.
+    null_to_zero
+      Optional string (true/false)
+      Whether to convert null values to zero
   */
 
   Macro "read_view" (MacroOpts) do
@@ -515,6 +518,7 @@ Class "df" (tbl)
     view = MacroOpts.view
     set = MacroOpts.set
     fields = MacroOpts.fields
+    null_to_zero = MacroOpts.null_to_zero
 
     // Check for required arguments and
     // that data frame is currently empty
@@ -541,6 +545,8 @@ Class "df" (tbl)
     SelectByQuery("temp", "Several", qry)
     DeleteSet("temp")
 
+    opts = null
+    opts.[Missing As Zero] = null_to_zero
     data = GetDataVectors(view + "|" + set, fields, )
     for f = 1 to fields.length do
       field = fields[f]
