@@ -24,7 +24,7 @@ Adds variables to MacroOpts that will be used my multiple macros
 Macro "da create variables"
   shared MacroOpts
 
-  MacroOpts.hwy_o = output_dir + "delay_allocation.dbd"
+  MacroOpts.hwy_o = MacroOpts.output_dir + "delay_allocation.dbd"
 EndMacro
 
 /*
@@ -36,6 +36,7 @@ Macro "da initial calculations"
 
   // Extract arguments
   hwy_b = MacroOpts.hwy_b
+  hwy_nb = MacroOpts.hwy_nb
   hwy_o = MacroOpts.hwy_o
   output_dir = MacroOpts.output_dir
 
@@ -57,16 +58,19 @@ Macro "da initial calculations"
   ExportGeography(llyr_b + "|to_export", hwy_o, opts)
   DropLayerFromWorkspace(llyr_b)
 
-  // Open the result highway layer
+  // Open the output highway layer
   {nlyr_o, llyr_o} = GetDBLayers(hwy_o)
   llyr_o = AddLayerToWorkspace(llyr_o, hwy_o, llyr_o)
 
-  // Join the nobuild layer to the result layer
+  // Join the nobuild layer to the output layer
   {nlyr_nb, llyr_nb} = GetDBLayers(hwy_nb)
   llyr_nb = AddLayerToWorkspace(llyr_nb, hwy_nb, llyr_nb)
   dv_join = JoinViews("build+nobuild", llyr_nb + ".ID", noBuildLayer+".ID", )
   SetView(dv_join)
 
+  // Collect projID, vol, cap, and time measures
+  // (convert any nulls to zeros)
+  data_b = CreateObject("df")
 EndMacro
 
 
@@ -75,11 +79,6 @@ EndMacro
 Macro "old"
 
 
-
-
-
-    // Collect projID, vol, cap, and time measures
-    // (convert any nulls to zeros)
     Opts = null
     Opts.[Missing As Zero] = "True"
     v_linkID = GetDataVector(dv_join + "|", llayer + ".ID", Opts)
@@ -991,4 +990,21 @@ Macro "Get Dist from Matrix" (a_id, b_id, mtx_cur)
     end
   end
 
+EndMacro
+
+/*
+This macro reads the example data and parameters in the GT repository, performs
+the delay allocation method, and then checks the results against known answers.
+This way, it will be easy to determine if the algorithm is broken by a
+modification to the script.
+
+There is no way to automatically locate the location of this script on different
+computers without compiling to UI. Instead, modify the 'test_dir' variable
+to point to the "unit_test" folder before testing. Try to avoid commiting that
+change to the repo.
+*/
+
+Macro "da unit test"
+
+  test_dir = "Y:\\projects/gisdk_tools/repo/network_tools/delay_allocation/unit_test"
 EndMacro

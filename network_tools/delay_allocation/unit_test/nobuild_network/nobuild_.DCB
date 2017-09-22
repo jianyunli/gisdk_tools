@@ -1,0 +1,13 @@
+
+80
+"ID",I,1,4,0,10,0,,"","",,"Blank",
+"ID:1",I,5,4,0,10,0,,"","",,"Blank",
+"PARKINGNODE",I,9,4,0,10,0,,"","",,"Blank",
+"CBD Walk",I,13,4,0,10,0,,"","",,"Blank",
+"6digitTAZ",I,17,4,0,10,0,,"","",,"Blank",
+"TAZ",I,21,4,0,8,0,,"","",,"Blank",
+"County",C,25,16,0,16,0,,"","",,"Blank",
+"External",I,41,4,0,8,0,,"","",,"Blank",
+"PnR Category1",C,45,16,0,16,0,,"","",,"Blank",
+"PnR Category2",C,61,16,0,16,0,,"","",,"Blank",
+"Preserve",I,77,4,0,8,0,,"","",,"Blank",
