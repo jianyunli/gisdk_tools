@@ -1,1 +1,7 @@
 Param,Value,Description
+ab_flow,ABDlyVol,Field name for AB daily volume (vehicles)
+ba_flow,BADlyVol,Field name for BA daily volume (vehicles)
+ab_cap,ABDlyCap,Field name for AB daily capacity
+ba_cap,BADlyCap,Field name for BA daily capacity
+ab_delay,ABDlyDelay,Field name for AB daily delay (hours)
+ba_delay,BADlyDelay,Field name for BA daily delay (hours)
