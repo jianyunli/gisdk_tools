@@ -10,7 +10,7 @@ Macro "Delay Allocation" (Args)
   MacroOpts = Args // handles GISDK memory error
 
   RunMacro("Close All")
-  CreateProgressBar("Delay Allocation", "True")
+  //CreateProgressBar("Delay Allocation", "True")
 
   // Steps
   RunMacro("da create variables")
@@ -62,13 +62,16 @@ Macro "da initial calculations"
   {nlyr_b, llyr_b} = GetDBLayers(hwy_b)
   llyr_b = AddLayerToWorkspace(llyr_b, hwy_b, llyr_b)
   SetLayer(llyr_b)
-  ccClass = if TypeOf(Args.General.ccClass) = "string"
-    then "'" + Args.General.ccClass + "'"
-    else String(Args.General.ccClass)
-  qry = "Select * where " + Args.General.fClass + " <> " + ccClass
+  params.cc_class = if TypeOf(params.cc_class) = "string"
+    then "'" + params.cc_class + "'"
+    else String(params.cc_class)
+  qry = "Select * where " + params.fclass_field + " <> " + params.cc_class
   SelectByQuery("to_export", "Several", qry)
   opts = null
   {, opts.[Field Spec]} = GetFields(llyr_b, "All")
+  opts.[Layer Name] = "da_link"
+  opts.[Node Name] = "da_node"
+  opts.Label = "Delay Allocation Output Layer"
   ExportGeography(llyr_b + "|to_export", hwy_o, opts)
   DropLayerFromWorkspace(llyr_b)
 
@@ -76,15 +79,35 @@ Macro "da initial calculations"
   {nlyr_o, llyr_o} = GetDBLayers(hwy_o)
   llyr_o = AddLayerToWorkspace(llyr_o, hwy_o, llyr_o)
 
-  // Join the nobuild layer to the output layer
-  {nlyr_nb, llyr_nb} = GetDBLayers(hwy_nb)
-  llyr_nb = AddLayerToWorkspace(llyr_nb, hwy_nb, llyr_nb)
-  dv_join = JoinViews("build+nobuild", llyr_nb + ".ID", noBuildLayer+".ID", )
-  SetView(dv_join)
-
-  // Collect projID, vol, cap, and time measures
+  // Collect data from the build layer
   // (convert any nulls to zeros)
   data_b = CreateObject("df")
+  a_fieldnames = {
+    "ID", "Length",
+    params.ab_flow, params.ba_flow,
+    params.ab_cap, params.ba_cap,
+    params.ab_delay, params.ba_delay
+  }
+  opts = null
+  opts.view = llyr_o
+  opts.fields = a_fieldnames
+  opts.null_to_zero = "True"
+  data_b.read_view(opts)
+Throw()
+
+  // Collect data from the nobuild layer (joined to build)
+  {nlyr_nb, llyr_nb} = GetDBLayers(hwy_nb)
+  llyr_nb = AddLayerToWorkspace(llyr_nb, hwy_nb, llyr_nb)
+  vw_join = JoinViews("output+nobuild", llyr_o + ".ID", llyr_nb+".ID", )
+  SetView(vw_join)
+  data_nb = CreateObject("df")
+  opts = null
+  opts.view = vw_join
+  opts.fields = llyr_nb + "." + A2V(a_fieldnames)
+  opts.null_to_zero = "True"
+  data_b.read_view(opts)
+
+
 EndMacro
 
 
@@ -95,31 +118,31 @@ Macro "old"
 
     Opts = null
     Opts.[Missing As Zero] = "True"
-    v_linkID = GetDataVector(dv_join + "|", llayer + ".ID", Opts)
-    v_length = GetDataVector(dv_join + "|", llayer + ".Length", Opts)
-    v_allprojid = GetDataVector(dv_join + "|", llayer + "." + Args.Benefits.projID, Opts)
+    v_linkID = GetDataVector(vw_join + "|", llayer + ".ID", Opts)
+    v_length = GetDataVector(vw_join + "|", llayer + ".Length", Opts)
+    v_allprojid = GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.projID, Opts)
     // all build values
-    v_abABffSpeed = nz(GetDataVector(dv_join + "|", llayer + "." + Args.Benefits.abffSpeed, Opts))
-    v_abBAffSpeed = nz(GetDataVector(dv_join + "|", llayer + "." + Args.Benefits.baffSpeed, Opts))
-    v_abABVol = nz(GetDataVector(dv_join + "|", llayer + "." + Args.Benefits.abFlow, Opts))
-    v_abBAVol = nz(GetDataVector(dv_join + "|", llayer + "." + Args.Benefits.baFlow, Opts))
-    v_abABCap = nz(GetDataVector(dv_join + "|", llayer + "." + Args.Benefits.abCap, Opts))
-    v_abBACap = nz(GetDataVector(dv_join + "|", llayer + "." + Args.Benefits.baCap, Opts))
-    v_abABDelay = nz(GetDataVector(dv_join + "|", llayer + "." + Args.Benefits.abDelay, Opts))
-    v_abBADelay = nz(GetDataVector(dv_join + "|", llayer + "." + Args.Benefits.baDelay, Opts))
+    v_abABffSpeed = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.abffSpeed, Opts))
+    v_abBAffSpeed = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.baffSpeed, Opts))
+    v_abABVol = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.abFlow, Opts))
+    v_abBAVol = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.baFlow, Opts))
+    v_abABCap = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.abCap, Opts))
+    v_abBACap = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.baCap, Opts))
+    v_abABDelay = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.abDelay, Opts))
+    v_abBADelay = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.baDelay, Opts))
     // no build values
-    v_nbABffSpeed = nz(GetDataVector(dv_join + "|", noBuildLayer + "." + Args.Benefits.abffSpeed, Opts))
-    v_nbBAffSpeed = nz(GetDataVector(dv_join + "|", noBuildLayer + "." + Args.Benefits.baffSpeed, Opts))
-    v_nbABVol = nz(GetDataVector(dv_join + "|", noBuildLayer + "." + Args.Benefits.abFlow, Opts))
-    v_nbBAVol = nz(GetDataVector(dv_join + "|", noBuildLayer + "." + Args.Benefits.baFlow, Opts))
-    v_nbABCap = nz(GetDataVector(dv_join + "|", noBuildLayer + "." + Args.Benefits.abCap, Opts))
-    v_nbBACap = nz(GetDataVector(dv_join + "|", noBuildLayer + "." + Args.Benefits.baCap, Opts))
-    v_nbABDelay = nz(GetDataVector(dv_join + "|", noBuildLayer + "." + Args.Benefits.abDelay, Opts))
-    v_nbBADelay = nz(GetDataVector(dv_join + "|", noBuildLayer + "." + Args.Benefits.baDelay, Opts))
+    v_nbABffSpeed = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.abffSpeed, Opts))
+    v_nbBAffSpeed = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.baffSpeed, Opts))
+    v_nbABVol = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.abFlow, Opts))
+    v_nbBAVol = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.baFlow, Opts))
+    v_nbABCap = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.abCap, Opts))
+    v_nbBACap = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.baCap, Opts))
+    v_nbABDelay = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.abDelay, Opts))
+    v_nbBADelay = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.baDelay, Opts))
 
-    CloseView(dv_join)
+    CloseView(vw_join)
     DropLayerFromWorkspace(llayer)
-    DropLayerFromWorkspace(noBuildLayer)
+    DropLayerFromWorkspace(llyr_nb)
 
     // Calculate absolute and pct changes from no build to build
     v_ABVolDiff = v_abABVol - v_nbABVol
