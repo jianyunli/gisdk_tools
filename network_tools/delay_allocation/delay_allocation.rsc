@@ -109,32 +109,37 @@ Macro "da initial calculations"
 
   // Clean up workspace
   CloseView(vw_join)
-  DropLayerFromWorkspace(llyr_b)
   DropLayerFromWorkspace(llyr_nb)
 
-  // Calculate absolute and pct changes from no build to build
-  data_b.mutate("ab_vol_diff", data_b.tbl.ab_vol)
+  // Calculate absolute and pct volume changes from no build to build
+  v_abdiff = data_b.get_vector(params.ab_vol) - data_nb.get_vector(params.ab_vol)
+  data_b.mutate("ab_vol_diff", v_abdiff)
+  v_badiff = data_b.get_vector(params.ba_vol) - data_nb.get_vector(params.ba_vol)
+  data_b.mutate("ba_vol_diff", v_badiff)
+  v_totdiff = data_b.get_vector("ab_vol_diff") + data_b.get_vector("ba_vol_diff")
+  data_b.mutate("tot_vol_diff", v_totdiff)
+  v_abpctdiff = min(999, v_abdiff / (data_nb.get_vector(params.ab_vol) + .0001) * 100)
+  data_b.mutate("ab_vol_pct_diff", v_abpctdiff)
+  v_bapctdiff = min(999, v_badiff / (data_nb.get_vector(params.ba_vol) + .0001) * 100)
+  data_b.mutate("ba_vol_pct_diff", v_bapctdiff)
 
+  // Calculate absolute and pct volume changes from no build to build
+  v_abdiff = data_b.get_vector(params.ab_cap) - data_nb.get_vector(params.ab_cap)
+  data_b.mutate("ab_cap_diff", v_abdiff)
+  v_badiff = data_b.get_vector(params.ba_cap) - data_nb.get_vector(params.ba_cap)
+  data_b.mutate("ba_cap_diff", v_badiff)
+  v_totdiff = data_b.get_vector("ab_cap_diff") + data_b.get_vector("ba_cap_diff")
+  data_b.mutate("tot_cap_diff", v_totdiff)
+  v_abpctdiff = min(999, v_abdiff / (data_nb.get_vector(params.ab_cap) + .0001) * 100)
+  data_b.mutate("ab_cap_pct_diff", v_abpctdiff)
+  v_bapctdiff = min(999, v_badiff / (data_nb.get_vector(params.ba_cap) + .0001) * 100)
+  data_b.mutate("ba_cap_pct_diff", v_bapctdiff)
 EndMacro
 
 
 // Previous code implementing delay allocation method
 
 Macro "old"
-
-    // Calculate absolute and pct changes from no build to build
-    v_ABVolDiff = v_abABVol - v_nbABVol
-    v_BAVolDiff = v_abBAVol - v_nbBAVol
-    v_totVolDiff = v_ABVolDiff + v_BAVolDiff
-    // if the volume decreases to 0, it should be -100%
-    v_ABVolPctDiff = if ( v_nbABVol = 0 ) then 999 else (v_abABVol - v_nbABVol) / v_nbABVol * 100
-    v_BAVolPctDiff = if ( v_nbBAVol = 0 ) then 999 else (v_abBAVol - v_nbBAVol) / v_nbBAVol * 100
-    v_ABCapDiff = v_abABCap - v_nbABCap
-    v_BACapDiff = v_abBACap - v_nbBACap
-    v_totCapDiff = v_ABCapDiff + v_BACapDiff
-    // if the capacity decreases to 0, it should be -100%
-    v_ABCapPctDiff = if ( v_nbABCap = 0 ) then 999 else (v_abABCap - v_nbABCap) / v_nbABCap * 100
-    v_BACapPctDiff = if ( v_nbBACap = 0 ) then 999 else (v_abBACap - v_nbBACap) / v_nbBACap * 100
 
     // If delay is in minutes, convert to hours
     if Args.Benefits.abDelayUnits = "mins" then do
