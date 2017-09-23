@@ -1,9 +1,10 @@
 Param,Value,Description
-ab_flow,ABDlyVol,Field name for AB daily volume (vehicles)
-ba_flow,BADlyVol,Field name for BA daily volume (vehicles)
+ab_vol,ABDlyVol,Field name for AB daily volume (vehicles)
+ba_vol,BADlyVol,Field name for BA daily volume (vehicles)
 ab_cap,ABDlyCap,Field name for AB daily capacity
 ba_cap,BADlyCap,Field name for BA daily capacity
 ab_delay,ABDlyDelay,Field name for AB daily delay (hours)
 ba_delay,BADlyDelay,Field name for BA daily delay (hours)
 fclass_field,NEWFCLASS,Field name for functional class (must contain a centroid connector class)
 cc_class,99,Value of fclass_field that represents centroid connectors
+projid_field,ProjID,Field name containing project IDs

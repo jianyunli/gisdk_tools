@@ -83,8 +83,8 @@ Macro "da initial calculations"
   // (convert any nulls to zeros)
   data_b = CreateObject("df")
   a_fieldnames = {
-    "ID", "Length",
-    params.ab_flow, params.ba_flow,
+    "ID", "Length", params.projid_field,
+    params.ab_vol, params.ba_vol,
     params.ab_cap, params.ba_cap,
     params.ab_delay, params.ba_delay
   }
@@ -107,6 +107,13 @@ Macro "da initial calculations"
   data_nb.read_view(opts)
   data_nb.rename(opts.fields, a_fieldnames)
 
+  // Clean up workspace
+  CloseView(vw_join)
+  DropLayerFromWorkspace(llyr_b)
+  DropLayerFromWorkspace(llyr_nb)
+
+  // Calculate absolute and pct changes from no build to build
+  data_b.mutate("ab_vol_diff", data_b.tbl.ab_vol)
 
 EndMacro
 
@@ -114,35 +121,6 @@ EndMacro
 // Previous code implementing delay allocation method
 
 Macro "old"
-
-
-    Opts = null
-    Opts.[Missing As Zero] = "True"
-    v_linkID = GetDataVector(vw_join + "|", llayer + ".ID", Opts)
-    v_length = GetDataVector(vw_join + "|", llayer + ".Length", Opts)
-    v_allprojid = GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.projID, Opts)
-    // all build values
-    v_abABffSpeed = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.abffSpeed, Opts))
-    v_abBAffSpeed = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.baffSpeed, Opts))
-    v_abABVol = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.abFlow, Opts))
-    v_abBAVol = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.baFlow, Opts))
-    v_abABCap = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.abCap, Opts))
-    v_abBACap = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.baCap, Opts))
-    v_abABDelay = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.abDelay, Opts))
-    v_abBADelay = nz(GetDataVector(vw_join + "|", llayer + "." + Args.Benefits.baDelay, Opts))
-    // no build values
-    v_nbABffSpeed = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.abffSpeed, Opts))
-    v_nbBAffSpeed = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.baffSpeed, Opts))
-    v_nbABVol = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.abFlow, Opts))
-    v_nbBAVol = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.baFlow, Opts))
-    v_nbABCap = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.abCap, Opts))
-    v_nbBACap = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.baCap, Opts))
-    v_nbABDelay = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.abDelay, Opts))
-    v_nbBADelay = nz(GetDataVector(vw_join + "|", llyr_nb + "." + Args.Benefits.baDelay, Opts))
-
-    CloseView(vw_join)
-    DropLayerFromWorkspace(llayer)
-    DropLayerFromWorkspace(llyr_nb)
 
     // Calculate absolute and pct changes from no build to build
     v_ABVolDiff = v_abABVol - v_nbABVol
@@ -164,49 +142,6 @@ Macro "old"
       v_abBADelay = v_abBADelay / 60
       v_nbABDelay = v_nbABDelay / 60
       v_nbBADelay = v_nbBADelay / 60
-    end
-
-    /*
-    Discount delay
-    This is an optional feature that is currently not used.
-    The idea is to dampen the effects of extreme deficiency while still
-    being sensitive to changes in V/C above 1.  A discount value of .5,
-    for example, would reduce delay from congestion above V/C = 1
-    (i.e. below half the FFS) by 50%.
-
-    There is really no way to calibrate this number, and to date, using the
-    conical VDF and scanning the no-build network for extreme V/C and making
-    needed corrections has been adequate.  Setting the discount = 1 effectively
-    turns off this feature.
-    */
-    discount = 1
-
-    // calculate delay at V/C = 1
-    //                                                   [trav time at half speed]     * flow
-    v_abABmaxDelay = if v_abABffSpeed = 0 then 0 else v_length / ( v_abABffSpeed / 2 ) * v_abABVol
-    v_abBAmaxDelay = if v_abBAffSpeed = 0 then 0 else v_length / ( v_abBAffSpeed / 2 ) * v_abBAVol
-    v_nbABmaxDelay = if v_nbABffSpeed = 0 then 0 else v_length / ( v_nbABffSpeed / 2 ) * v_nbABVol
-    v_nbBAmaxDelay = if v_nbBAffSpeed = 0 then 0 else v_length / ( v_nbBAffSpeed / 2 ) * v_nbBAVol
-
-    v_abABDelayDiscount = if v_abABDelay <= v_abABmaxDelay then v_abABDelay else v_abABmaxDelay + (v_abABDelay - v_abABmaxDelay) * discount
-    v_abBADelayDiscount = if v_abBADelay <= v_abBAmaxDelay then v_abBADelay else v_abBAmaxDelay + (v_abBADelay - v_abBAmaxDelay) * discount
-    v_nbABDelayDiscount = if v_nbABDelay <= v_nbABmaxDelay then v_nbABDelay else v_nbABmaxDelay + (v_nbABDelay - v_nbABmaxDelay) * discount
-    v_nbBADelayDiscount = if v_nbBADelay <= v_nbBAmaxDelay then v_nbBADelay else v_nbBAmaxDelay + (v_nbBADelay - v_nbBAmaxDelay) * discount
-
-    v_ABDelayDiff = v_abABDelayDiscount - v_nbABDelayDiscount
-    v_BADelayDiff = v_abBADelayDiscount - v_nbBADelayDiscount
-    v_totDelayDiff = v_ABDelayDiff + v_BADelayDiff
-
-    // Check calculation in debug mode
-    if Args.General.debug = 1 then do
-      csvFile = output_dir + "delay discount check.csv"
-      file = OpenFile(csvFile,"w")
-      WriteLine(file,"  ,,No Build,        ,            ,            ,                   ,                   ,,All Build,       ,            ,            ,                   ,                   ")
-      WriteLine(file,"ID,,AB Delay,BA Delay,AB Max Delay,BA Max Delay,AB Discounted Delay,BA Discounted Delay,,AB Delay,BA Delay,AB Max Delay,BA Max Delay,AB Discounted Delay,BA Discounted Delay")
-      for i = 1 to v_ABDelayDiff.length do
-        WriteLine(file,String(v_linkID[i]) + ",," + String(v_nbABDelay[i]) + "," + String(v_nbBADelay[i]) + "," + String(v_nbABmaxDelay[i]) + "," + String(v_nbBAmaxDelay[i]) + "," + String(v_nbABDelayDiscount[i]) + "," + String(v_nbBADelayDiscount[i]) + ",," + String(v_abABDelay[i]) + "," + String(v_abBADelay[i]) + "," + String(v_abABmaxDelay[i]) + "," + String(v_abBAmaxDelay[i]) + "," + String(v_abABDelayDiscount[i]) + "," + String(v_abBADelayDiscount[i]))
-      end
-      CloseFile(file)
     end
 
 
