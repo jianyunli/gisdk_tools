@@ -542,8 +542,8 @@ Class "df" (tbl)
     DeleteSet("temp")
 
     opts = null
-    opts.[Missing As Zero] = null_to_zero
-    data = GetDataVectors(view + "|" + set, fields, )
+    opts.[Missing as Zero] = null_to_zero
+    data = GetDataVectors(view + "|" + set, fields, opts)
     for f = 1 to fields.length do
       field = fields[f]
       self.tbl.(field) = data[f]
