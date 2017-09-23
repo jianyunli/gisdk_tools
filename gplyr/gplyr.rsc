@@ -329,6 +329,10 @@ Class "df" (tbl)
   Macro "rename" (current_name, new_name) do
 
     // Argument checking
+    if !self.in(TypeOf(current_name), {"string", "vector", "array"})
+      then Throw("rename: 'current_name' must be string, array, or vector")
+    if !self.in(TypeOf(new_name), {"string", "vector", "array"})
+      then Throw("rename: 'new_name' must be string, array, or vector")
     if TypeOf(current_name)  = "string" then current_name = {current_name}
     if TypeOf(current_name)  = "vector" then current_name = V2A(current_name)
     if TypeOf(new_name)  = "string" then current_name = {new_name}
