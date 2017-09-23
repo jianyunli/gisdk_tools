@@ -318,31 +318,27 @@ Class "df" (tbl)
   Changes the name of a column in a table object
 
   current_name
-    String or array of strings
-    current name of the field in the table
+    String, array, or vector of strings
+    current name(s) of the field in the table
   new_name
-    String or array of strings
-    desired new name of the field
-    if array, must be the same length as current_name
+    String, array, or vector of strings
+    desired new name(s) of the field
+    must be the same length as current_name
   */
 
   Macro "rename" (current_name, new_name) do
 
     // Argument checking
-    if TypeOf(current_name) <> TypeOf(new_name)
-      then Throw("rename: Current and new name must be same type")
-    if TypeOf(current_name) <> "string" then do
-      if TypeOf(current_name[1]) <> "string"
-        then Throw("rename: Field name arrays must contain strings")
-      if ArrayLength(current_name) <> ArrayLength(new_name)
-        then Throw("rename: Field name arrays must be same length")
-    end
-
-    // If a single field string, convert string to array
-    if TypeOf(current_name) = "string" then do
-      current_name = {current_name}
-      new_name = {new_name}
-    end
+    if TypeOf(current_name)  = "string" then current_name = {current_name}
+    if TypeOf(current_name)  = "vector" then current_name = V2A(current_name)
+    if TypeOf(new_name)  = "string" then current_name = {new_name}
+    if TypeOf(new_name)  = "vector" then current_name = V2A(new_name)
+    if ArrayLength(current_name) <> ArrayLength(new_name)
+      then Throw("rename: Field name arrays must be same length")
+    if TypeOf(current_name[1]) <> "string"
+      then Throw("rename: 'current_name' must contain strings")
+    if TypeOf(new_name[1]) <> "string"
+      then Throw("rename: 'new_name' must contain strings")
 
     for n = 1 to current_name.length do
       cName = current_name[n]
