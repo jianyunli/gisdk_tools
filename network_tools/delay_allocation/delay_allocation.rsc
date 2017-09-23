@@ -93,7 +93,6 @@ Macro "da initial calculations"
   opts.fields = a_fieldnames
   opts.null_to_zero = "True"
   data_b.read_view(opts)
-Throw()
 
   // Collect data from the nobuild layer (joined to build)
   {nlyr_nb, llyr_nb} = GetDBLayers(hwy_nb)
@@ -105,7 +104,8 @@ Throw()
   opts.view = vw_join
   opts.fields = llyr_nb + "." + A2V(a_fieldnames)
   opts.null_to_zero = "True"
-  data_b.read_view(opts)
+  data_nb.read_view(opts)
+  data_nb.rename(opts.fields, a_fieldnames)
 
 
 EndMacro
