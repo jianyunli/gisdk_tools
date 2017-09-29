@@ -134,46 +134,30 @@ Macro "da initial calculations"
   data_b.mutate("ab_cap_pct_diff", v_abpctdiff)
   v_bapctdiff = min(999, v_badiff / (data_nb.get_vector(params.ba_cap) + .0001) * 100)
   data_b.mutate("ba_cap_pct_diff", v_bapctdiff)
+
+  // Determine unique list of project IDs
+  Opts = null
+  Opts.Unique = "True"
+  Opts.Ascending = "False"
+  v_uniqueProjID = SortVector(data_b.get_vector(params.projid_field),Opts)
+
+  // Determine which projects change capacity (positive or negative)
+  df = data_b.copy()
+  df.filter(params.projid_field + " <> null")
+  df.group_by(params.projid_field)
+  agg = null
+  agg.tot_cap_diff = {"sum"}
+  df.summarize(agg)
+  df.filter("sum_tot_cap_diff <> 0")
+  a_projID = df.get_vector(params.projid_field)
+  
+
 EndMacro
 
 
 // Previous code implementing delay allocation method
 
 Macro "old"
-
-    // If delay is in minutes, convert to hours
-    if Args.Benefits.abDelayUnits = "mins" then do
-      v_abABDelay = v_abABDelay / 60
-      v_abBADelay = v_abBADelay / 60
-      v_nbABDelay = v_nbABDelay / 60
-      v_nbBADelay = v_nbBADelay / 60
-    end
-
-
-    // Determine the unique list of project IDs
-    Opts = null
-    Opts.Unique = "True"
-    Opts.Ascending = "False"
-    v_uniqueProjID = SortVector(v_allprojid,Opts)
-    // Determine which projects change capacity
-    // (includes road diets as well as widenings)
-    a_projID = null
-    for i = 1 to v_uniqueProjID.length do
-      curProjID = v_uniqueProjID[i]
-
-      // Get the capacity change for the current project
-      v_capCheck = if ( v_allprojid = curProjID ) then v_totCapDiff else 0
-      totCapDiff = VectorStatistic(v_capCheck,"sum",)
-
-      // If the project has changed capacity, add it to the list
-      // Also, if the proj ID is 0 or null, ignore it.
-      if totCapDiff <> 0 then do
-        zero = if TypeOf(curProjID) = "string" then "0" else 0
-        if curProjID = zero or curProjID = null then continue
-        a_projID = a_projID + {curProjID}
-      end
-    end
-    v_projID = A2V(a_projID)
 
     /*
     Parcel the benefits out into primary and secondary types
