@@ -335,8 +335,8 @@ Class "df" (tbl)
       then Throw("rename: 'new_name' must be string, array, or vector")
     if TypeOf(current_name)  = "string" then current_name = {current_name}
     if TypeOf(current_name)  = "vector" then current_name = V2A(current_name)
-    if TypeOf(new_name)  = "string" then current_name = {new_name}
-    if TypeOf(new_name)  = "vector" then current_name = V2A(new_name)
+    if TypeOf(new_name)  = "string" then new_name = {new_name}
+    if TypeOf(new_name)  = "vector" then new_name = V2A(new_name)
     if ArrayLength(current_name) <> ArrayLength(new_name)
       then Throw("rename: Field name arrays must be same length")
     if TypeOf(current_name[1]) <> "string"
