@@ -15,6 +15,7 @@ Macro "Delay Allocation" (Args)
   // Steps
   RunMacro("da create variables")
   RunMacro("da initial calculations")
+  RunMacro("da classify benefits")
 
   RunMacro("Close All")
   DestroyProgressBar()
@@ -113,27 +114,35 @@ Macro "da initial calculations"
 
   // Calculate absolute and pct volume changes from no build to build
   v_abdiff = data_b.get_vector(params.ab_vol) - data_nb.get_vector(params.ab_vol)
-  data_b.mutate("ab_vol_diff", v_abdiff)
   v_badiff = data_b.get_vector(params.ba_vol) - data_nb.get_vector(params.ba_vol)
-  data_b.mutate("ba_vol_diff", v_badiff)
-  v_totdiff = data_b.get_vector("ab_vol_diff") + data_b.get_vector("ba_vol_diff")
-  data_b.mutate("tot_vol_diff", v_totdiff)
+  v_totdiff = v_abdiff + v_badiff
   v_abpctdiff = min(999, v_abdiff / (data_nb.get_vector(params.ab_vol) + .0001) * 100)
-  data_b.mutate("ab_vol_pct_diff", v_abpctdiff)
   v_bapctdiff = min(999, v_badiff / (data_nb.get_vector(params.ba_vol) + .0001) * 100)
-  data_b.mutate("ba_vol_pct_diff", v_bapctdiff)
+  data_b.mutate("ab_vol_diff", v_abdiff)
+  data_b.mutate("ba_vol_diff", v_badiff)
+  data_b.mutate("tot_vol_diff", v_totdiff)
+  data_b.mutate("v_ab_vol_pct_diff", v_abpctdiff)
+  data_b.mutate("v_ba_vol_pct_diff", v_bapctdiff)
 
-  // Calculate absolute and pct volume changes from no build to build
+  // Calculate absolute and pct capacity changes from no build to build
   v_abdiff = data_b.get_vector(params.ab_cap) - data_nb.get_vector(params.ab_cap)
-  data_b.mutate("ab_cap_diff", v_abdiff)
   v_badiff = data_b.get_vector(params.ba_cap) - data_nb.get_vector(params.ba_cap)
-  data_b.mutate("ba_cap_diff", v_badiff)
-  v_totdiff = data_b.get_vector("ab_cap_diff") + data_b.get_vector("ba_cap_diff")
-  data_b.mutate("tot_cap_diff", v_totdiff)
+  v_totdiff = v_abdiff + v_badiff
   v_abpctdiff = min(999, v_abdiff / (data_nb.get_vector(params.ab_cap) + .0001) * 100)
-  data_b.mutate("ab_cap_pct_diff", v_abpctdiff)
   v_bapctdiff = min(999, v_badiff / (data_nb.get_vector(params.ba_cap) + .0001) * 100)
-  data_b.mutate("ba_cap_pct_diff", v_bapctdiff)
+  data_b.mutate("ab_cap_diff", v_abdiff)
+  data_b.mutate("ba_cap_diff", v_badiff)
+  data_b.mutate("tot_cap_diff", v_totdiff)
+  data_b.mutate("v_ab_cap_pct_diff", v_abpctdiff)
+  data_b.mutate("v_ba_cap_pct_diff", v_bapctdiff)
+
+  // Calculate delay change
+  v_abdelaydiff = data_b.get_vector(params.ab_delay) - data_nb.get_vector(params.ab_delay)
+  v_badelaydiff = data_b.get_vector(params.ba_delay) - data_nb.get_vector(params.ba_delay)
+  v_totdelaydiff = v_abdelaydiff + v_badelaydiff
+  data_b.mutate("v_ab_delay_diff", v_abdelaydiff)
+  data_b.mutate("v_ba_delay_diff", v_badelaydiff)
+  data_b.mutate("tot_delay_diff", v_totdelaydiff)
 
   // Determine unique list of project IDs
   Opts = null
@@ -141,7 +150,7 @@ Macro "da initial calculations"
   Opts.Ascending = "False"
   v_uniqueProjID = SortVector(data_b.get_vector(params.projid_field),Opts)
 
-  // Determine which projects change capacity (positive or negative)
+  // Determine which projects change capacity
   df = data_b.copy()
   df.filter(params.projid_field + " <> null")
   df.group_by(params.projid_field)
@@ -149,117 +158,185 @@ Macro "da initial calculations"
   agg.tot_cap_diff = {"sum"}
   df.summarize(agg)
   df.filter("sum_tot_cap_diff <> 0")
-  a_projID = df.get_vector(params.projid_field)
-  
+  v_projid = df.get_vector(params.projid_field)
 
+  // Store results in shared variable
+  MacroOpts.data_b = data_b
+  MacroOpts.data_nb = data_nb
+  MacroOpts.params = params
+  MacroOpts.v_projid = v_projid
 EndMacro
 
+/*
+Parcel the benefits out into primary and secondary types
+Primary: caused by improvement to the link
+Secondary: caused by improvements to other, nearby links
+
+For each link, the first step is to calculate the percentage of primary and secondary benefit
+
+Start with rules:
+
+New Links
+                                    | Decrease Delay  |Increase Delay
+    Increase Capacity (New Road)	  |                 |
+        Increase Volume	            | n/a             |Primary
+        Decrease Volume	            | n/a             |n/a
+                                    |                 |
+                                    |                 |
+Existing Links				              |                 |
+                                    | Decrease Delay  |Increase Delay
+    Increase Capacity (Widening)   	|                 |
+        Increase Volume	            | Primary         |Secondary
+        Decrease Volume	            | Both (D.D.)     |n/a	                D.D. = decreased delay
+    Decrease Capacity (Road Diet)	  |                 |
+        Increase Volume	            | n/a             |Both (I.D.)          I.D. = increased delay
+        Decrease Volume	            | Secondary       |Primary
+
+For the cells above labelled "Both", a ratio of primary and secondary benefits
+must be determined.
+
+The change in capacity is used to approximate the proportion of primary benefit.
+    i.e. capacity increases are the result of the project
+The change in volume is used to approximate the proportion of secondary benefit.
+    i.e. volume decreases are the result of improvement in other projects
+
+Thus, the following ratio of ratios:
+
+abs(%change in Cap) / ( abs(%change in Cap) + abs(%change in Vol) )
+
+Absolute value is needed because, while capacity and volume are moving in
+opposite directions, you want to know their relative magnitude.
+
+This metric will determine how much of the change in delay on the project is due
+to the project and how much is the secondary benefit from other projects.
+
+Example 1: if a link's capacity increases by 20% and it's volume decreases by
+10%: 2/3 of the delay reduction is due to the project.  That is primary benefit.
+1/3 is due to improvements from other projects drawing volume away.  Secondary
+benefit.
+
+Example 2: if a link's capacity decreases by 30% and it's volume increases by
+10%: 3/4 of the delay increase is due to the project. 1/4 is due to changes in
+other links.
+*/
+
+Macro "da classify benefits"
+  shared MacroOpts
+
+  // Extract arguments to shorten names
+  data_b = MacroOpts.data_b
+  data_nb = MacroOpts.data_nb
+  params = MacroOpts.params
+
+  tot_cap_diff = data_b.get_vector("tot_cap_diff")
+  tot_vol_diff = data_b.get_vector("tot_vol_diff")
+  tot_delay_diff = data_b.get_vector("tot_delay_diff")
+
+  // Classify delay change on each link
+  v_category = Vector(data_b.nrow(),"String",)
+  // Classify links with decreased delay
+  v_category = if (tot_delay_diff < 0) then
+    // If capacity increases
+    (if tot_cap_diff >= 0 then
+        // If volume increases or decreases
+        (if tot_vol_diff >= 0 then "Primary" else "Both")
+      // If capacity decreases
+      else(if tot_cap_diff < 0 then
+        // If volume increases or decreases
+        (if tot_vol_diff >= 0 then "n/a" else "Secondary")
+      )
+    )
+    // Classify links with increased delay
+    else if (tot_delay_diff >= 0) then
+      // If capacity increases
+      (if tot_cap_diff >= 0 then
+        // If volume increases or decreases
+        (if tot_vol_diff >= 0 then "Secondary" else "n/a")
+      // If capacity decreases
+      else(if tot_cap_diff < 0 then
+        // If volume increases or decreases
+        (if tot_vol_diff >= 0 then "Both" else "Primary")
+        )
+      )
+    else null
+
+    // Overwrite the previous classification where two simple
+    // rules are satisfied:
+    // all delay changes on new facilities are primary
+    nb_cap = data_nb.get_vector(params.ab_cap) + data_nb.get_vector(params.ba_cap)
+    v_category = if (nb_cap = 0) then "Primary" else v_category
+    // if capacity doesn't change, all delay changes are secondary
+    v_category = if tot_cap_diff = 0 then "Secondary" else v_category
+    data_b.mutate("category", v_category)
+
+    // Calculate the ratio between capacity change and volume change. This is
+    // used to distribute changes in delay between links that have both primary
+    // and secondary benefits.
+    v_ab_cap_pct_diff = data_b.get_vector("v_ab_cap_pct_diff")
+    v_ab_vol_pct_diff = data_b.get_vector("v_ab_vol_pct_diff")
+    v_ba_cap_pct_diff = data_b.get_vector("v_ba_cap_pct_diff")
+    v_ba_vol_pct_diff = data_b.get_vector("v_ba_vol_pct_diff")
+    v_abcapratio = nz(abs(v_ab_cap_pct_diff) / (abs(v_ab_cap_pct_diff) + abs(v_ab_vol_pct_diff)))
+    v_bacapratio = nz(abs(v_ba_cap_pct_diff) / (abs(v_ba_cap_pct_diff) + abs(v_ba_vol_pct_diff)))
+    v_abvolratio = nz(abs(v_ab_vol_pct_diff) / (abs(v_ab_cap_pct_diff) + abs(v_ab_vol_pct_diff)))
+    v_bavolratio = nz(abs(v_ba_vol_pct_diff) / (abs(v_ba_cap_pct_diff) + abs(v_ba_vol_pct_diff)))
+    data_b.mutate("ab_cap_ratio", v_abcapratio)
+    data_b.mutate("ba_cap_ratio", v_bacapratio)
+    data_b.mutate("ab_vol_ratio", v_abvolratio)
+    data_b.mutate("ba_vol_ratio", v_bavolratio)
+
+    // Calculate primary benefits based on this grouping
+    // Multiply the benefit vectors by -1 to change a decrease in delay
+    // into a positive benefit metric.
+    v_ab_delay_diff = data_b.get_vector("v_ab_delay_diff")
+    v_ba_delay_diff = data_b.get_vector("v_ba_delay_diff")
+    v_ab_prim_ben = if v_category = "Primary"
+      then v_ab_delay_diff * -1
+      else if v_category = "Both"
+        then v_ab_delay_diff * -1 * v_abcapratio
+        else v_ab_prim_ben
+    v_ba_prim_ben = if v_category = "Primary"
+      then v_ba_delay_diff * -1
+      else if v_category = "Both"
+        then v_ba_delay_diff * -1 * v_bacapratio
+        else v_ba_prim_ben
+    // Calculate secondary benefits
+    v_ab_sec_ben  = if v_category = "Secondary"
+      then v_ab_delay_diff * -1
+      else if v_category = "Both"
+        then v_ab_delay_diff * -1 * v_abvolratio
+        else v_ab_sec_ben
+    v_ba_sec_ben  = if v_category = "Secondary"
+      then v_ba_delay_diff * -1
+      else if v_category = "Both"
+        then v_ba_delay_diff * -1 * v_bavolratio
+        else v_ba_sec_ben
+
+    // For some reason, the above equations can lead to "negative zero"
+    // results that sort as smaller than, for example, -80
+    // Doesn't make sense - Have to set them to 0
+    v_ab_prim_ben = if (v_ab_prim_ben < .0001 and v_ab_prim_ben > -.0001) then 0
+      else v_ab_prim_ben
+    v_ba_prim_ben = if (v_ba_prim_ben < .0001 and v_ba_prim_ben > -.0001) then 0
+      else v_ba_prim_ben
+    v_ab_sec_ben = if (v_ab_sec_ben < .0001 and v_ab_sec_ben > -.0001) then 0
+      else v_ab_sec_ben
+    v_ba_sec_ben = if (v_ba_sec_ben < .0001 and v_ba_sec_ben > -.0001) then 0
+      else v_ba_sec_ben
+
+    data_b.mutate("ab_prim_ben", nz(v_ab_prim_ben))
+    data_b.mutate("ba_prim_ben", nz(v_ba_prim_ben))
+    data_b.mutate("ab_sec_ben", nz(v_ab_sec_ben))
+    data_b.mutate("ba_sec_ben", nz(v_ba_sec_ben))
+
+    MacroOpts.data_b = data_b
+EndMacro
 
 // Previous code implementing delay allocation method
 
 Macro "old"
 
-    /*
-    Parcel the benefits out into primary and secondary types
-    Primary: caused by improvement to the link
-    Secondary: caused by improvements to other, nearby links
 
-    For each link, the first step is to calculate the percentage of primary and secondary benefit
-
-    Start with rules:
-
-    New Links
-                                        | Decrease Delay  |Increase Delay
-        Increase Capacity (New Road)	  |                 |
-            Increase Volume	            | n/a             |Primary
-            Decrease Volume	            | n/a             |n/a
-                                        |                 |
-                                        |                 |
-    Existing Links				              |                 |
-                                        | Decrease Delay  |Increase Delay
-        Increase Capacity (Widening)   	|                 |
-            Increase Volume	            | Primary         |Secondary
-            Decrease Volume	            | Both (D.D.)     |n/a	                D.D. = decreased delay
-        Decrease Capacity (Road Diet)	  |                 |
-            Increase Volume	            | n/a             |Both (I.D.)          I.D. = increased delay
-            Decrease Volume	            | Secondary       |Primary
-
-    For the cells above labelled "Both", a ratio of primary and secondary benefits
-    must be determined.
-
-    The change in capacity is used to approximate the proportion of primary benefit.
-        i.e. capacity increases are the result of the project
-    The change in volume is used to approximate the proportion of secondary benefit.
-        i.e. volume decreases are the result of improvement in other projects
-
-    Thus, the following ratio of ratios:
-
-    abs(%change in Cap) / ( abs(%change in Cap) + abs(%change in Vol) )
-
-    Absolute value is needed because, while capacity and volume are moving in opposite
-    direction, you want to know their relative magnitude.
-
-    This metric will determine how much of the change in delay on the project is
-    due to the project and how much is the secondary benefit from other projects.
-
-    Example 1: if a link's capacity increases by 20% and it's volume decreases by 10%:
-    2/3 of the delay reduction is due to the project.  That is primary benefit.
-    1/3 is due to improvements from other projects drawing volume away.  Secondary benefit.
-
-    Example 2: if a link's capacity decreases by 30% and it's volume increases by 10%:
-    3/4 of the delay increase is due to the project.
-    1/4 is due to changes in other links.
-    */
-
-    // For this section of code, ab/ba once again refers to direction (ab is not "all build").
-    // Confusing.  Clean up if given time.
-
-    // Determine which cell (from the commented table above) the links fall into.
-    v_linkCategory = Vector(v_allprojid.length,"String",)
-    v_linkCategory =    if (v_totDelayDiff < 0) then             // Decreased Delay
-        (if v_totCapDiff >= 0 then                               // Increased Capacity
-          (if v_totVolDiff >= 0 then "Primary" else "Both")      // Increased/Decreased Volume
-        else(if v_totCapDiff < 0 then                            // Decreased Capacity
-          (if v_totVolDiff >= 0 then "n/a" else "Secondary")     // Increased/Decreased Volume
-          )
-        )
-
-      else if (v_totDelayDiff >= 0) then                         // Increased Delay
-        (if v_totCapDiff >= 0 then                               // Increased Capacity
-          (if v_totVolDiff >= 0 then "Secondary" else "n/a")     // Increased/Decreased Volume
-        else(if v_totCapDiff < 0 then                            // Decreased Capacity
-          (if v_totVolDiff >= 0 then "Both" else "Primary")      // Increased/Decreased Volume
-          )
-        )
-      else null
-
-    // all delay changes on new facilities are primary
-    v_linkCategory = if (v_nbABCap + v_nbBACap = 0) then "Primary" else v_linkCategory
-    // if capacity doesn't change, all delay changes are secondary
-    v_linkCategory = if v_totCapDiff = 0 then "Secondary" else v_linkCategory
-
-    // Calculate the "both" ratios for all links (even though only used for some)
-    v_abCapRatio = abs(v_ABCapPctDiff) / ( abs(v_ABCapPctDiff) + abs(v_ABVolPctDiff ))
-    v_baCapRatio = abs(v_BACapPctDiff) / ( abs(v_BACapPctDiff) + abs(v_BAVolPctDiff ))
-    v_abVolRatio = abs(v_ABVolPctDiff) / ( abs(v_ABCapPctDiff) + abs(v_ABVolPctDiff ))
-    v_baVolRatio = abs(v_BAVolPctDiff) / ( abs(v_BACapPctDiff) + abs(v_BAVolPctDiff ))
-
-    // Calculate primary/secondary benefits based on this grouping
-    // Multiply the benefit vectors by -1 to change a decrease in delay
-    // into a positive benefit metric.
-    v_abPrimBen = if v_linkCategory = "Primary" then v_ABDelayDiff * -1 else 0
-    v_abPrimBen = if v_linkCategory = "Both" then
-      v_ABDelayDiff * -1 * v_abCapRatio else v_abPrimBen
-    v_baPrimBen = if v_linkCategory = "Primary" then v_BADelayDiff * -1 else 0
-    v_baPrimBen = if v_linkCategory = "Both" then
-      v_BADelayDiff * -1 * v_baCapRatio else v_baPrimBen
-
-    v_abSecBen  = if v_linkCategory = "Secondary" then v_ABDelayDiff * -1 else 0
-    v_abSecBen  = if v_linkCategory = "Both" then
-      v_ABDelayDiff * -1 * v_abVolRatio else v_abSecBen
-    v_baSecBen  = if v_linkCategory = "Secondary" then v_BADelayDiff * -1 else 0
-    v_baSecBen  = if v_linkCategory = "Both" then
-      v_BADelayDiff * -1 * v_baVolRatio else v_baSecBen
 
     // Check calculation in debug mode
     if Args.General.debug = 1 then do
@@ -268,12 +345,12 @@ Macro "old"
       testCSV = output_dir + "TestLinkCategoryLogic.csv"
       file = OpenFile(testCSV,"w")
       WriteLine(file,"ProjID,nbCap,totDelayDiff,totCapDiff,totVolDiff,Type,abCapRatio,baCapRatio,abVolRatio,baVolRatio,abPrimBen,baPrimBen,abSecBen,baSecBen")
-      for i = 1 to v_linkCategory.length do
+      for i = 1 to v_category.length do
         pID = v_allprojid[i]
         pID = if TypeOf(pID) <> "string" then String(pID) else pID
         WriteLine(file, pID + "," + String(v_nbABCap[i] + v_nbBACap[i]) + "," + String(v_totDelayDiff[i]) + "," + String(v_totCapDiff[i]) + "," + String(v_totVolDiff[i])
-          + "," + v_linkCategory[i] + "," + String(v_abCapRatio[i]) + "," + String(v_baCapRatio[i]) + "," + String(v_abVolRatio[i]) + "," + String(v_baVolRatio[i]) + "," + String(v_abPrimBen[i]) + "," + String(v_baPrimBen[i])
-          + "," + String(v_abSecBen[i]) + "," + String(v_baSecBen[i]))
+          + "," + v_category[i] + "," + String(v_abcapratio[i]) + "," + String(v_bacapratio[i]) + "," + String(v_abvolratio[i]) + "," + String(v_bavolratio[i]) + "," + String(v_ab_prim_ben[i]) + "," + String(v_ba_prim_ben[i])
+          + "," + String(v_ab_sec_ben[i]) + "," + String(v_ba_sec_ben[i]))
       end
       CloseFile(file)
     end
@@ -281,14 +358,14 @@ Macro "old"
     // For some reason, these equations can lead to "negative zero"
     // results that sort as smaller than, for example, -80
     // Doesn't make sense - Have to set them to 0
-    v_abPrimBen = if ( v_abPrimBen < .0001 and v_abPrimBen > -.0001 ) then 0
-      else v_abPrimBen
-    v_baPrimBen = if ( v_baPrimBen < .0001 and v_baPrimBen > -.0001 ) then 0
-      else v_baPrimBen
-    v_abSecBen = if ( v_abSecBen < .0001 and v_abSecBen > -.0001 ) then 0
-      else v_abSecBen
-    v_baSecBen = if ( v_baSecBen < .0001 and v_baSecBen > -.0001 ) then 0
-      else v_baSecBen
+    v_ab_prim_ben = if ( v_ab_prim_ben < .0001 and v_ab_prim_ben > -.0001 ) then 0
+      else v_ab_prim_ben
+    v_ba_prim_ben = if ( v_ba_prim_ben < .0001 and v_ba_prim_ben > -.0001 ) then 0
+      else v_ba_prim_ben
+    v_ab_sec_ben = if ( v_ab_sec_ben < .0001 and v_ab_sec_ben > -.0001 ) then 0
+      else v_ab_sec_ben
+    v_ba_sec_ben = if ( v_ba_sec_ben < .0001 and v_ba_sec_ben > -.0001 ) then 0
+      else v_ba_sec_ben
 
     // Modify the structure of the result hwy file
     // to add benefit-related fields
@@ -336,13 +413,13 @@ Macro "old"
     SetDataVector(	dv_temp + "|",	"BAVolChange",	v_BAVolDiff	,)
     SetDataVector(	dv_temp + "|",	"ABPctVolChange",	v_ABVolPctDiff	,)
     SetDataVector(	dv_temp + "|",	"BAPctVolChange",	v_BAVolPctDiff	,)
-    SetDataVector(	dv_temp + "|",	"ABDelayChange",	v_ABDelayDiff	,)
-    SetDataVector(	dv_temp + "|",	"BADelayChange",	v_BADelayDiff	,)
-    SetDataVector(	dv_temp + "|",	"LinkCategory",	v_linkCategory	,)
-    SetDataVector(	dv_temp + "|",	"ABPrimBen",	v_abPrimBen	,)
-    SetDataVector(	dv_temp + "|",	"BAPrimBen",	v_baPrimBen	,)
-    SetDataVector(	dv_temp + "|",	"ABSecBen",	v_abSecBen	,)
-    SetDataVector(	dv_temp + "|",	"BASecBen",	v_baSecBen	,)
+    SetDataVector(	dv_temp + "|",	"ABDelayChange",	v_ab_delay_diff	,)
+    SetDataVector(	dv_temp + "|",	"BADelayChange",	v_ba_delay_diff	,)
+    SetDataVector(	dv_temp + "|",	"LinkCategory",	v_category	,)
+    SetDataVector(	dv_temp + "|",	"ABPrimBen",	v_ab_prim_ben	,)
+    SetDataVector(	dv_temp + "|",	"BAPrimBen",	v_ba_prim_ben	,)
+    SetDataVector(	dv_temp + "|",	"ABSecBen",	v_ab_sec_ben	,)
+    SetDataVector(	dv_temp + "|",	"BASecBen",	v_ba_sec_ben	,)
 
 
 
@@ -354,8 +431,8 @@ Macro "old"
 
     // Loop over each project ID and determine the length
     SetLayer(dv_temp)
-    for p = 1 to v_projID.length do
-      projID = v_projID[p]
+    for p = 1 to v_projid.length do
+      projID = v_projid[p]
 
       // Some models use strings for project IDs, others don't.  Catch both.
       if Args.Benefits.projIDType = "String" then
@@ -455,12 +532,12 @@ Macro "old"
 
     // Loop over each project
     CreateProgressBar("Secondary Benefit Allocation", "True")
-    for p = 1 to v_projID.length do
-      projID = v_projID[p]
+    for p = 1 to v_projid.length do
+      projID = v_projid[p]
       cancel = UpdateProgressBar(
         "Processing project number " + String(p) +
-        " of " + String(v_projID.length),
-        R2I((p - 1) / v_projID.length * 100)
+        " of " + String(v_projid.length),
+        R2I((p - 1) / v_projid.length * 100)
       )
       if cancel then do
         DestroyProgressBar()
@@ -744,12 +821,12 @@ Macro "old"
     // Util - "Utilization" or how much of the project is being used
     // Prime - Primary benefits on the project links
     // Change means the difference between build and no-build
-    v_projVMTDiff = Vector(v_projID.length,"Float",{{"Constant",0}})
-    v_projCMADiff = Vector(v_projID.length,"Float",{{"Constant",0}})
-    v_projPrimeBen = Vector(v_projID.length,"Float",{{"Constant",0}})
+    v_projVMTDiff = Vector(v_projid.length,"Float",{{"Constant",0}})
+    v_projCMADiff = Vector(v_projid.length,"Float",{{"Constant",0}})
+    v_projPrimeBen = Vector(v_projid.length,"Float",{{"Constant",0}})
 
-    for i = 1 to v_projID.length do
-      projID = v_projID[i]
+    for i = 1 to v_projid.length do
+      projID = v_projid[i]
 
       // VMT Change
       v_tempVMT = if ( v_allprojid = projID ) then v_length * (v_ABVolDiff + v_BAVolDiff) else 0
@@ -763,7 +840,7 @@ Macro "old"
       v_projCMADiff[i] = cma
 
       // Primary Benefits
-      v_tempBen = if ( v_allprojid = projID ) then (v_abPrimBen + v_baPrimBen) else 0
+      v_tempBen = if ( v_allprojid = projID ) then (v_ab_prim_ben + v_ba_prim_ben) else 0
       primeBen = VectorStatistic(v_tempBen,"Sum",)
 
       v_projPrimeBen[i] = primeBen
@@ -775,7 +852,7 @@ Macro "old"
     // Create a final table object
     a_colNames = {"proj_id", "vmt_diff", "cap_diff",
       "utilization", "primary_benefits"}
-    a_data = {v_projID, v_projVMTDiff, v_projCMADiff,
+    a_data = {v_projid, v_projVMTDiff, v_projCMADiff,
       v_projUtil, v_projPrimeBen}
     RESULT = RunMacro("Create Table", a_colNames, a_data)
 
@@ -790,7 +867,7 @@ Macro "old"
     )
 
     // Show warning if the delay increased from no-build to build
-    v_totalDelayDiff = v_ABDelayDiff + v_BADelayDiff
+    v_totalDelayDiff = v_ab_delay_diff + v_ba_delay_diff
     if VectorStatistic(v_totalDelayDiff,"sum",) > 0 then do
       warningString = "Warning: Total delay increased from no-build " +
         "to build scenarios."
