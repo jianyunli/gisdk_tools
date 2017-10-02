@@ -18,7 +18,7 @@ Macro "Delay Allocation" (Args)
   RunMacro("da classify benefits")
 
   RunMacro("Close All")
-  DestroyProgressBar()
+  //DestroyProgressBar()
 EndMacro
 
 /*
@@ -228,6 +228,7 @@ Macro "da classify benefits"
   data_nb = MacroOpts.data_nb
   params = MacroOpts.params
   output_dir = MacroOpts.output_dir
+  hwy_o = MacroOpts.hwy_o
 
   tot_cap_diff = data_b.get_vector("tot_cap_diff")
   tot_vol_diff = data_b.get_vector("tot_vol_diff")
@@ -330,12 +331,18 @@ Macro "da classify benefits"
     data_b.mutate("ab_sec_ben", nz(v_ab_sec_ben))
     data_b.mutate("ba_sec_ben", nz(v_ba_sec_ben))
 
-    MacroOpts.data_b = data_b
+    // Update the output highway layer
+    update_df = data_b.copy()
+    opts = null
+    opts.start = "ab_vol_diff"
+    opts.stop = "ba_sec_ben"
+    columns = update_df.colnames(opts)
+    update_df.select(columns)
+    {nlyr, llyr} = GetDBLayers(hwy_o)
+    llyr = AddLayerToWorkspace(llyr, hwy_o, llyr)
+    update_df.update_view(llyr)
 
-    // Check calculations in debug mode
-    if MacroOpts.debug = 1 then data_b.write_csv(
-      output_dir + "debug_link_classification.csv"
-    )
+    RunMacro ("Close All")
 EndMacro
 
 // Previous code implementing delay allocation method
