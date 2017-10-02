@@ -16,6 +16,7 @@ Macro "Delay Allocation" (Args)
   RunMacro("da create variables")
   RunMacro("da initial calculations")
   RunMacro("da classify benefits")
+  RunMacro("da allocate secondary benefits")
 
   RunMacro("Close All")
   //DestroyProgressBar()
@@ -330,6 +331,7 @@ Macro "da classify benefits"
     data_b.mutate("ba_prim_ben", nz(v_ba_prim_ben))
     data_b.mutate("ab_sec_ben", nz(v_ab_sec_ben))
     data_b.mutate("ba_sec_ben", nz(v_ba_sec_ben))
+    MacroOpts.data_b = data_b
 
     // Update the output highway layer
     update_df = data_b.copy()
@@ -345,103 +347,56 @@ Macro "da classify benefits"
     RunMacro ("Close All")
 EndMacro
 
+/*
+
+*/
+
+Macro "da allocate secondary benefits"
+  shared MacroOpts
+
+  // Extract arguments to shorten names
+  params = MacroOpts.params
+  hwy_o = MacroOpts.hwy_o
+  data_b = MacroOpts.data_b
+
+  // Add fields to the output highway layer
+  /*{nlyr, llyr} = GetDBLayers(hwy_o)
+  llyr = AddLayerToWorkspace(llyr, hwy_o, llyr)
+  a_fields = {
+    {"tot_proj_length", "Real", 12, 2,,,,"Approximate length of project"},
+    {"proj_benefits", "Real", 12, 2,,,,"Approximate length of project"},
+    {"score", "Real", 12, 2,,,,"Approximate length of project"}
+  }
+  RunMacro ("Add Fields", llyr, a_fields, a_initial_values)*/
+
+  // Determine total project lengths
+  temp_df = data_b.copy()
+  temp_df.filter(params.projid_field + " <> null")
+  temp_df.group_by(params.projid_field)
+  v_proj_length = if temp_df.get_vector("Dir") <> 0
+    then temp_df.get_vector("Length") / 2
+    else temp_df.get_vector("Length")
+  temp_df.mutate("proj_length", v_proj_length)
+  agg = null
+  agg.proj_length = {"sum"}
+  temp_df.summarize(agg)
+  temp_df.rename("sum_proj_length", "tot_proj_length")
+  data_b.left_join(temp_df, "ProjID", "ProjID")
+  update_df = data_b.copy()
+  update_df.select("tot_proj_length")
+  update_df.update_view(llyr)
+
+  RunMacro("Close All")
+EndMacro
+
+
 // Previous code implementing delay allocation method
 
 Macro "old"
 
-    // Modify the structure of the result hwy file
-    // to add benefit-related fields
-    {nlayer, llayer} = GetDBLayers(hwy_o)
-    dv_temp = AddLayerToWorkspace(
-      llayer, hwy_o, llayer,
-    )
-    strct = GetTableStructure(dv_temp)
-    for i = 1 to strct.length do
-        strct[i] = strct[i] + {strct[i][1]}
-    end
-
-    strct = strct + {{"ABCapChange"  , "Real", 12, 2, "False", , ,    "AB Pct Capacity Change on Link", , , , null}}
-    strct = strct + {{"BACapChange"  , "Real", 12, 2, "False", , ,    "BA Pct Capacity Change on Link", , , , null}}
-    strct = strct + {{"ABPctCapChange"  , "Real", 12, 2, "False", , , "AB Pct Capacity Change on Link", , , , null}}
-    strct = strct + {{"BAPctCapChange"  , "Real", 12, 2, "False", , , "BA Pct Capacity Change on Link", , , , null}}
-    strct = strct + {{"ABVolChange"  , "Real", 12, 2, "False", , ,    "AB Pct Volume Change on Link", , , , null}}
-    strct = strct + {{"BAVolChange"  , "Real", 12, 2, "False", , ,    "BA Pct Volume Change on Link", , , , null}}
-    strct = strct + {{"ABPctVolChange"  , "Real", 12, 2, "False", , , "AB Pct Volume Change on Link", , , , null}}
-    strct = strct + {{"BAPctVolChange"  , "Real", 12, 2, "False", , , "BA Pct Volume Change on Link", , , , null}}
-    // If the delay is discounted for V/C > 1, state that in the description
-    if discount <> 1 then do
-      strct = strct + {{"ABDelayChange"   , "Real", 12, 2, "False", , , "Discounted AB Delay Change on Link. Delay above V/C = 1 multiplied by " + String(discount), , , , null}}
-      strct = strct + {{"BADelayChange"   , "Real", 12, 2, "False", , , "Discounted AB Delay Change on Link. Delay above V/C = 1 multiplied by " + String(discount), , , , null}}
-    end else do
-      strct = strct + {{"ABDelayChange"   , "Real", 12, 2, "False", , , "Total AB Delay Change on Link", , , , null}}
-      strct = strct + {{"BADelayChange"   , "Real", 12, 2, "False", , , "Total BA Delay Change on Link", , , , null}}
-    end
-    strct = strct + {{"LinkCategory"   , "String", 12, 2, "False", , , "Whether the link benefits are Primary, Secondary, or Both", , , , null}}
-    strct = strct + {{"ABPrimBen"       , "Real", 12, 4, "False", , , "Delay savings from improvements to this link", , , , null}}
-    strct = strct + {{"BAPrimBen"       , "Real", 12, 4, "False", , , "Delay savings from improvements to this link", , , , null}}
-    strct = strct + {{"ABSecBen"        , "Real", 12, 4, "False", , , "Delay savings from improvements to other links", , , , null}}
-    strct = strct + {{"BASecBen"        , "Real", 12, 4, "False", , , "Delay savings from improvements to other links", , , , null}}
-    strct = strct + {{"ProjectLength"  , "Real", 12, 2, "False", , ,    "The approximate length of the project", , , , null}}
-    strct = strct + {{"ProjBens"        , "Real", 12, 4, "False", , , "Total benefits assigned to this project ID", , , , null}}
-    strct = strct + {{"Score"        , "Real", 12, 4, "False", , , "Final score of this project ID|Manually filled in", , , , null}}
-    ModifyTable(dv_temp, strct)
-
-    // Set the values of the new fields
-    SetDataVector(	dv_temp + "|",	"ABCapChange",	v_ABCapDiff	,)
-    SetDataVector(	dv_temp + "|",	"BACapChange",	v_BACapDiff	,)
-    SetDataVector(	dv_temp + "|",	"ABPctCapChange",	v_ABCapPctDiff	,)
-    SetDataVector(	dv_temp + "|",	"BAPctCapChange",	v_BACapPctDiff	,)
-    SetDataVector(	dv_temp + "|",	"ABVolChange",	v_ABVolDiff	,)
-    SetDataVector(	dv_temp + "|",	"BAVolChange",	v_BAVolDiff	,)
-    SetDataVector(	dv_temp + "|",	"ABPctVolChange",	v_ABVolPctDiff	,)
-    SetDataVector(	dv_temp + "|",	"BAPctVolChange",	v_BAVolPctDiff	,)
-    SetDataVector(	dv_temp + "|",	"ABDelayChange",	v_ab_delay_diff	,)
-    SetDataVector(	dv_temp + "|",	"BADelayChange",	v_ba_delay_diff	,)
-    SetDataVector(	dv_temp + "|",	"LinkCategory",	v_category	,)
-    SetDataVector(	dv_temp + "|",	"ABPrimBen",	v_ab_prim_ben	,)
-    SetDataVector(	dv_temp + "|",	"BAPrimBen",	v_ba_prim_ben	,)
-    SetDataVector(	dv_temp + "|",	"ABSecBen",	v_ab_sec_ben	,)
-    SetDataVector(	dv_temp + "|",	"BASecBen",	v_ba_sec_ben	,)
-
-
-
-
-
     /*
     Secondary benefit allocation
     */
-
-    // Loop over each project ID and determine the length
-    SetLayer(dv_temp)
-    for p = 1 to v_projid.length do
-      projID = v_projid[p]
-
-      // Some models use strings for project IDs, others don't.  Catch both.
-      if Args.Benefits.projIDType = "String" then
-        projQuery = "Select * where " + Args.Benefits.projID + " = '" +
-        projID + "'"
-      else projQuery = "Select * where " + Args.Benefits.projID + " = " +
-        String(projID)
-      n = SelectByQuery("tempproj","Several",projQuery)
-
-      // Get direction and length vectors
-      v_dir = GetDataVector(dv_temp + "|tempproj","Dir",)
-      v_lengthTemp = GetDataVector(dv_temp + "|tempproj","Length",)
-
-      // Divide length by 2 if direction <> 0 (to avoid double counting length)
-      v_lengthTemp = if v_dir <> 0 then v_lengthTemp / 2 else v_lengthTemp
-
-      // Determine the total project distance and set that value for every
-      // link with the same project ID in the network
-      projLength = VectorStatistic(v_lengthTemp,"Sum",)
-      opts = null
-      opts.Constant = projLength
-      v_projLength = Vector(v_lengthTemp.length,"Double",opts)
-      SetDataVector(dv_temp + "|tempproj","ProjectLength",v_projLength,)
-    end
-    DeleteSet("tempproj")
-
-    DropLayerFromWorkspace(dv_temp)
 
     // Create a map of the resulting highway layer
     {map,nlayer,llayer} = RunMacro("Create Highway Map", hwy_o)
@@ -536,7 +491,7 @@ Macro "old"
       if n = 0 then Throw("No project records found")
 
       // Determine buffer distance
-      v_proj_length = GetDataVector(llayer + "|" + projectSet, "ProjectLength", )
+      v_proj_length = GetDataVector(llayer + "|" + projectSet, "tot_proj_length", )
       proj_length = v_proj_length[1]
       buffer = proj_length
       buffer = min(buffer, 10)
@@ -1036,7 +991,7 @@ Macro "da unit test"
   RunMacro("Delay Allocation", opts)
 
   // Delete the output folder after checking results
-  RunMacro("Delete Directory", opts.output_dir)
+  // RunMacro("Delete Directory", opts.output_dir)
 
   ShowMessage("Passed Tests")
 EndMacro
