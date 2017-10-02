@@ -358,6 +358,8 @@ Macro "da allocate secondary benefits"
   params = MacroOpts.params
   hwy_o = MacroOpts.hwy_o
   data_b = MacroOpts.data_b
+  output_dir = MacroOpts.output_dir
+  v_projid = MacroOpts.v_projid
 
   // Add fields to the output highway layer
   /*{nlyr, llyr} = GetDBLayers(hwy_o)
@@ -386,6 +388,325 @@ Macro "da allocate secondary benefits"
   update_df.select("tot_proj_length")
   update_df.update_view(llyr)
 
+  // Create map of output highway
+  opts = null
+  opts.file = hwy_o
+  {map, {nlyr, llyr}} = RunMacro ("Create map", opts)
+
+  // Create a distance skim matrix from every node to every node
+  Opts = null
+  Opts.Input.[Link Set] = {hwy_o + "|" + llyr, llyr}
+  Opts.Global.[Network Label] = "network"
+  Opts.Global.[Network Options].[Turn Penalties] = "Yes"
+  Opts.Global.[Network Options].[Keep Duplicate Links] = "FALSE"
+  Opts.Global.[Network Options].[Ignore Link Direction] = "FALSE"
+  Opts.Global.[Network Options].[Time Units] = "Minutes"
+  Opts.Global.[Link Options].Length = {llyr + ".Length", llyr + ".Length", , , "False"}
+  Opts.Global.[Length Units] = "Miles"
+  Opts.Global.[Time Units] = "Minutes"
+  net_file = output_dir + "/network.net"
+  Opts.Output.[Network File] = net_file
+  ret = RunMacro("TCB Run Operation", "Build Highway Network", Opts, &Ret)
+
+  Opts = null
+  Opts.Input.Network = net_file
+  Opts.Input.[Origin Set] = {hwy_o + "|" + nlyr, nlyr}
+  Opts.Input.[Destination Set] = {hwy_o + "|" + nlyr, nlyr}
+  Opts.Input.[Via Set] = {hwy_o + "|" + nlyr, nlyr}
+  Opts.Field.Minimize = "Length"
+  Opts.Field.Nodes = nlyr + ".ID"
+  Opts.Flag = {}
+  Opts.Output.[Output Matrix].Label = "Shortest Path"
+  Opts.Output.[Output Matrix].Compression = 1
+  mtx_file = output_dir + "/distance.mtx"
+  Opts.Output.[Output Matrix].[File Name] = mtx_file
+  ret = RunMacro("TCB Run Procedure", "TCSPMAT", Opts, &Ret)
+
+  // Open the matrix, create a currency, and convert
+  // nulls (diagonal) to zeros.
+  mtx = OpenMatrix(mtx_file, )
+  {ri, ci} = GetMatrixIndex(mtx)
+  mtx_cores = GetMatrixCoreNames(mtx)
+  mtx_cur = CreateMatrixCurrency(mtx, mtx_cores[1], ri, ci, )
+  mtx_cur := nz(mtx_cur)
+
+  // Create two node fields on the line layer to display from/to node IDs
+  from_node = CreateNodeField(llyr, "from_node", nlyr + ".ID", "From", )
+  to_node = CreateNodeField(llyr, "to_node", nlyr + ".ID", "To", )
+
+  /*
+  Loop over each project.
+
+  Three sets will be used within the loop:
+  project_set
+    Selection of links of the current project
+  link_set
+    Selection of a single link of a project
+    (while looping over the proj links)
+  link_buffer_set
+    Selection of links within the buffer distance around the current proj link
+
+  In addition, the link_set and link_buffer_set also have their nodes selected.
+  */
+  project_set = RunMacro("G30 create set","current project")
+  link_set = RunMacro("G30 create set", "project's link")
+  link_set_nodes = RunMacro("G30 create set", "project's link's nodes")
+  link_buffer_set = RunMacro("G30 create set", "project's link's buffer")
+  link_buffer_set_nodes = RunMacro(
+    "G30 create set", "project's link's buffer's nodes"
+  )
+
+  DATA = null
+
+  // Loop over each project
+  CreateProgressBar("Secondary Benefit Allocation", "True")
+  for p = 1 to v_projid.length do
+    proj_id = v_projid[p]
+    cancel = UpdateProgressBar(
+      "Processing project number " + String(p) +
+      " of " + String(v_projid.length),
+      R2I((p - 1) / v_projid.length * 100)
+    )
+    if cancel then do
+      DestroyProgressBar()
+      DestroyProgressBar()
+      Throw("User pressed 'Cancel'")
+    end
+
+    // Select the current project
+    SetLayer(llyr)
+    qry = "Select * where " + params.projid_field + " = " +
+      (if TypeOf(proj_id) = "string" then "'" + proj_id + "'"
+      else String(proj_id))
+    n = SelectByQuery(project_set, "Several", qry)
+    if n = 0 then Throw("No project records found")
+
+    // Determine buffer distance
+    v_proj_length = GetDataVector(llyr + "|" + project_set, "tot_proj_length", )
+    proj_length = v_proj_length[1]
+    buffer = proj_length
+    buffer = min(buffer, 10)
+
+    // Loop over each link of the current project
+    v_proj_link_id = GetDataVector(llyr + "|" + project_set, "ID",)
+    CreateProgressBar("Individual Project Links", "True")
+    for i = 1 to v_proj_link_id.length do
+      id = v_proj_link_id[i]
+      cancel = UpdateProgressBar(
+        "Processing link number " + String(i) +
+        " of " + String(v_proj_link_id.length),
+        R2I((i - 1) / v_proj_link_id.length * 100)
+      )
+      if cancel then do
+        DestroyProgressBar()
+        DestroyProgressBar()
+        Throw("User pressed 'Cancel'")
+      end
+
+      // Determine the absolute VMT change on the project link
+      // Use absolute VMT change because changes in either direction
+      // can induce postive or negative changes on surrounding links.
+      // For example, a positive VMT change on a project can create
+      // more delay on surrounding links that are now used to feed
+      // the project link.  A positive VMT change can also cause a
+      // reduction in delay on a parallel facility that now has less
+      // traffic.
+      rh = LocateRecord(llyr + "|", "ID", {id}, )
+      SetRecord(llyr, rh)
+      ab_vol_change = llyr.ab_vol_change
+      ba_vol_change = llyr.ba_vol_change
+      length = llyr.Length
+      vmt_change = abs(ab_vol_change + ba_vol_change) * length
+
+      // Select the current link and it's nodes
+      SetLayer(llyr)
+      qry = "Select * where ID = " + String(id)
+      SelectByQuery(link_set, "Several", qry)
+      SetLayer(nlayer)
+      SelectByLinks(link_set_nodes, "Several", link_set, )
+
+      // Select all links within the buffer distance of the current project
+      // link and collect their link IDs.  Don't include links from the
+      // current project in the set.  Other projects' links can be included.
+      // They may have secondary benefits (mixed benefit type).
+      SetLayer(llyr)
+      opts = null
+      opts.Inclusion = "Intersecting"
+      opts.[Source Not] = project_set
+      SelectByVicinity(
+        link_buffer_set, "Several", llyr + "|" + link_set, buffer, opts
+      )
+
+      // Collect ID information on the buffer links and create a table.
+      v_buffer_link_ids = GetDataVector(llyr + "|" + link_buffer_set, "ID", opts)
+      v_buffer_link_fnode = GetDataVector(
+        llyr + "|" + link_buffer_set, "from_node", opts
+      )
+      v_buffer_link_tnode = GetDataVector(
+        llyr + "|" + link_buffer_set, "to_node", opts
+      )
+      buffer_tbl = null
+      buffer_tbl.link_id = v_buffer_link_ids
+      buffer_tbl.from_node = v_buffer_link_fnode
+      buffer_tbl.to_node = v_buffer_link_tnode
+
+      // Select the buffer link's nodes as well. Allow the current link's
+      // nodes to be selected, too.  Distances used are link-to-link, and
+      // are calculated by averaging node distances.
+      SetLayer(nlayer)
+      SelectByLinks(link_buffer_set_nodes, "Several", link_buffer_set, )
+
+      // Create indices for proj link nodes and buffer nodes
+      // Delete any that already exist
+      a_ind_names = GetMatrixIndexNames(mtx)
+      a_ind_names = a_ind_names[1]
+      if ArrayPosition(a_ind_names, {"proj_link"}, ) <> 0 then
+        DeleteMatrixIndex(mtx, "proj_link")
+      link_index = CreateMatrixIndex(
+        "proj_link", mtx, "Both", nlayer + "|" + link_set_nodes,
+        "ID", "ID"
+      )
+      if ArrayPosition(a_ind_names, {"buffer_link"}, ) <> 0 then
+        DeleteMatrixIndex(mtx, "buffer_link")
+      buffer_index = CreateMatrixIndex(
+        "buffer_link", mtx, "Both", nlayer + "|" + link_buffer_set_nodes,
+        "ID", "ID"
+      )
+
+      // Create currencies for each direction of travel (from project link
+      // and to project link).
+      from_link_cur = CreateMatrixCurrency(
+        mtx, mtx_cores[1], link_index, buffer_index,
+      )
+      to_link_cur = CreateMatrixCurrency(
+        mtx, mtx_cores[1], buffer_index, link_index,
+      )
+
+      // Get distance vectors from skim matrix.   Collect for both proj nodes
+      // and in both directions (4 vectors)
+      SetLayer(llyr)
+      a_nodes = GetEndpoints(id)
+      dist = null
+      opts = null
+      opts.Index = "Row"
+      dist.buffer_node = GetMatrixVector(to_link_cur, opts)
+      dist.buffer_node.rowbased  ="True"
+      for n = 1 to a_nodes.length do
+        node = a_nodes[n]
+
+        opts = null
+        opts.Row = node
+        dist.("from_" + String(node)) = GetMatrixVector(from_link_cur, opts)
+        dist.("from_" + String(node)).rowbased = "True"
+        opts = null
+        opts.Column = node
+        dist.("to_" + String(node)) = GetMatrixVector(to_link_cur, opts)
+        dist.("to_" + String(node)).rowbased = "True"
+      end
+
+      dist.min_to = min(
+        dist.("to_" + String(a_nodes[1])), dist.("to_" + String(a_nodes[2]))
+      )
+      dist.min_from = min(dist.("from_" + String(a_nodes[1])), dist.("from_" +
+        String(a_nodes[2])))
+      dist.direction = if dist.min_to < dist.min_from then "to" else "from"
+      dist.min_dist = min(dist.min_to, dist.min_from)
+      dist.max_dist = if dist.direction = "to"
+        then max(dist.("to_" + String(a_nodes[1])), dist.("to_" +
+          String(a_nodes[2])))
+        else max(dist.("from_" + String(a_nodes[1])), dist.("from_" +
+          String(a_nodes[2])))
+
+      // To check/debug the distance table calculations
+      if p = 1 and i = 1 and MacroOpts.debug = 1 then do
+        dist_df = CreateObject("df", dist)
+        dist_df.write_csv(
+          output_dir + "/debug - distance calc for proj " +
+          proj_id + " link 1.csv"
+        )
+      end
+
+      // Join the dist table to the buffer table twice - once for each node
+      // on the buffer link
+      // The average distance is calculated from both buffer link nodes to
+      // the nearest project node.  This removes bias against long project
+      // links.
+      dist.select({"buffer_node", "min_dist"})
+      buffer_df = CreateObject("df", buffer_tbl)
+      buffer_df.left_join(dist, "from_node", "buffer_node")
+      buffer_df.rename("min_dist", "min_dist1")
+      buffer_df.left_join(dist, "to_node", "buffer_node")
+      buffer_df.rename("min_dist", "min_dist2")
+      buffer_df.mutate(
+        "avg_dist",
+        (buffer_df.tbl.min_dist1 + buffer_df.tbl.min_dist2) / 2
+      )
+
+      // Create a table with the buffer link ids
+      // and their distances to the project link.
+      DATA = null
+      DATA.BufferLinkID = buffer_tbl.link_id
+
+      // Collect secondary info and add to table
+      ABSecBen = GetDataVector(llyr + "|" + link_buffer_set, "ABSecBen", )
+      BASecBen = GetDataVector(llyr + "|" + link_buffer_set, "BASecBen", )
+      SecBen = ABSecBen + BASecBen
+      DATA.SecondaryBenefit = SecBen
+
+      // Add other pertinent data
+      // Add vmt change
+      opts = null
+
+      opts.Constant = proj_id
+      type = if TypeOf(proj_id) = "string" then "string" else "Long"
+      v_temp = Vector(v_buffer_link_ids.length, type, opts)
+      DATA.proj_id = v_temp
+
+      opts.Constant = id
+      v_temp = Vector(v_buffer_link_ids.length, "Long", opts)
+      DATA.projLinkID = v_temp
+
+      opts.Constant = vmt_change
+      v_temp = Vector(v_buffer_link_ids.length, "Double", opts)
+      DATA.vmt_change = v_temp
+
+      opts.Constant = buffer
+      v_temp = Vector(v_buffer_link_ids.length, "Double", opts)
+      DATA.buffer = v_temp
+
+      // Add distance and distance decay info
+      DATA.dist2link = buffer_tbl.avg_dist
+      // Set distance floor to .5 miles.
+      DATA.dist2link = max(DATA.dist2link, .5)
+      // Use (1/dist)^.5
+      /*DATA.DistWeight = Pow(1 / max(.5, v_dist), .5)*/
+
+      // Use (1 - dist / buffer) ^ 4
+      DATA.DistWeight = Pow(1 - DATA.dist2link / DATA.buffer, 4)
+      /* The average distance could be longer than the buffer for two reasons
+      1. The "touching" inclusion setting in SelectByVicinity
+      2. The difference between network skim distance and straightline buffer
+
+      If the average distance is larger than the buffer, the DistWeight
+      function starts going positive again.  Set it to zero if that happens.
+      This prevents that link from contributing any secondary benefits at all.
+
+      In effect, this trims the buffer links down to only those that can
+      reach the project link, along the network, within the buffer distance.*/
+      DATA.DistWeight = if DATA.dist2link > buffer then 0 else DATA.DistWeight
+
+      // Build the FINAL table by binding DATA to it
+      // after each loop
+      if p = 1 and i = 1 then do
+        FINAL = DATA
+      end else do
+        FINAL = RunMacro("Bind Rows", FINAL, DATA)
+      end
+    end
+
+    DestroyProgressBar()
+  end
+
   RunMacro("Close All")
 EndMacro
 
@@ -398,70 +719,27 @@ Macro "old"
     Secondary benefit allocation
     */
 
-    // Create a map of the resulting highway layer
-    {map,nlayer,llayer} = RunMacro("Create Highway Map", hwy_o)
-    SetLayer(llayer)
 
-    // Create a distance skim matrix from every node to every node
-    Opts = null
-    Opts.Input.[Link Set] = {hwy_o + "|" + llayer, llayer}
-    Opts.Global.[Network Label] = "network"
-    Opts.Global.[Network Options].[Turn Penalties] = "Yes"
-    Opts.Global.[Network Options].[Keep Duplicate Links] = "FALSE"
-    Opts.Global.[Network Options].[Ignore Link Direction] = "FALSE"
-    Opts.Global.[Network Options].[Time Units] = "Minutes"
-    Opts.Global.[Link Options].Length = {llayer + ".Length", llayer + ".Length", , , "False"}
-    Opts.Global.[Length Units] = "Miles"
-    Opts.Global.[Time Units] = "Minutes"
-    net_file = output_dir + "/network.net"
-    Opts.Output.[Network File] = net_file
-    ret = RunMacro("TCB Run Operation", "Build Highway Network", Opts, &Ret)
-
-    Opts = null
-    Opts.Input.Network = net_file
-    Opts.Input.[Origin Set] = {hwy_o + "|" + nlayer, nlayer}
-    Opts.Input.[Destination Set] = {hwy_o + "|" + nlayer, nlayer}
-    Opts.Input.[Via Set] = {hwy_o + "|" + nlayer, nlayer}
-    Opts.Field.Minimize = "Length"
-    Opts.Field.Nodes = nlayer + ".ID"
-    Opts.Flag = {}
-    Opts.Output.[Output Matrix].Label = "Shortest Path"
-    Opts.Output.[Output Matrix].Compression = 1
-    mtx_file = output_dir + "distance.mtx"
-    Opts.Output.[Output Matrix].[File Name] = mtx_file
-    ret = RunMacro("TCB Run Procedure", "TCSPMAT", Opts, &Ret)
-
-    // Open the matrix, create a currency, and convert
-    // nulls (diagonal) to zeros.
-    mtx = OpenMatrix(mtx_file, )
-    {ri, ci} = GetMatrixIndex(mtx)
-    mtx_cores = GetMatrixCoreNames(mtx)
-    mtx_cur = CreateMatrixCurrency(mtx, mtx_cores[1], ri, ci, )
-    mtx_cur := nz(mtx_cur)
-
-    // Create two node fields on the line layer to display from/to node IDs
-    from_node = CreateNodeField(llayer, "from_node", nlayer + ".ID", "From", )
-    to_node = CreateNodeField(llayer, "to_node", nlayer + ".ID", "To", )
 
     /*
     Loop over each project.
 
     Three sets will be used within the loop:
-    projectSet
+    project_set
       Selection of links of the current project
-    linkSet
+    link_set
       Selection of a single link of a project
       (while looping over the proj links)
-    linkBufferSet
+    link_buffer_set
       Selection of links within the buffer distance around the current proj link
 
-    In addition, the linkSet and linkBufferSet also have their nodes selected.
+    In addition, the link_set and link_buffer_set also have their nodes selected.
     */
-    projectSet = RunMacro("G30 create set","current project")
-    linkSet = RunMacro("G30 create set", "project's link")
-    linkSet_nodes = RunMacro("G30 create set", "project's link's nodes")
-    linkBufferSet = RunMacro("G30 create set", "project's link's buffer")
-    linkBufferSet_nodes = RunMacro(
+    project_set = RunMacro("G30 create set","current project")
+    link_set = RunMacro("G30 create set", "project's link")
+    link_set_nodes = RunMacro("G30 create set", "project's link's nodes")
+    link_buffer_set = RunMacro("G30 create set", "project's link's buffer")
+    link_buffer_set_nodes = RunMacro(
       "G30 create set", "project's link's buffer's nodes"
     )
 
@@ -470,7 +748,7 @@ Macro "old"
     // Loop over each project
     CreateProgressBar("Secondary Benefit Allocation", "True")
     for p = 1 to v_projid.length do
-      projID = v_projid[p]
+      proj_id = v_projid[p]
       cancel = UpdateProgressBar(
         "Processing project number " + String(p) +
         " of " + String(v_projid.length),
@@ -484,27 +762,27 @@ Macro "old"
 
       // Select the current project
       SetLayer(llayer)
-      qry = "Select * where " + Args.Benefits.projID + " = " +
-        (if TypeOf(projID) = "string" then "'" + projID + "'"
-        else String(projID))
-      n = SelectByQuery(projectSet, "Several", qry)
+      qry = "Select * where " + Args.Benefits.proj_id + " = " +
+        (if TypeOf(proj_id) = "string" then "'" + proj_id + "'"
+        else String(proj_id))
+      n = SelectByQuery(project_set, "Several", qry)
       if n = 0 then Throw("No project records found")
 
       // Determine buffer distance
-      v_proj_length = GetDataVector(llayer + "|" + projectSet, "tot_proj_length", )
+      v_proj_length = GetDataVector(llayer + "|" + project_set, "tot_proj_length", )
       proj_length = v_proj_length[1]
       buffer = proj_length
       buffer = min(buffer, 10)
 
       // Loop over each link of the current project
-      v_projLinkID = GetDataVector(llayer + "|" + projectSet, "ID",)
+      v_proj_link_id = GetDataVector(llayer + "|" + project_set, "ID",)
       CreateProgressBar("Individual Project Links", "True")
-      for i = 1 to v_projLinkID.length do
-        id = v_projLinkID[i]
+      for i = 1 to v_proj_link_id.length do
+        id = v_proj_link_id[i]
         cancel = UpdateProgressBar(
           "Processing link number " + String(i) +
-          " of " + String(v_projLinkID.length),
-          R2I((i - 1) / v_projLinkID.length * 100)
+          " of " + String(v_proj_link_id.length),
+          R2I((i - 1) / v_proj_link_id.length * 100)
         )
         if cancel then do
           DestroyProgressBar()
@@ -522,17 +800,17 @@ Macro "old"
         // traffic.
         rh = LocateRecord(llayer + "|", "ID", {id}, )
         SetRecord(llayer, rh)
-        ab_vol_change = llayer.ABVolChange
-        ba_vol_change = llayer.BAVolChange
+        ab_vol_change = llayer.ab_vol_change
+        ba_vol_change = llayer.ba_vol_change
         length = llayer.Length
         vmt_change = abs(ab_vol_change + ba_vol_change) * length
 
         // Select the current link and it's nodes
         SetLayer(llayer)
         qry = "Select * where ID = " + String(id)
-        SelectByQuery(linkSet, "Several", qry)
+        SelectByQuery(link_set, "Several", qry)
         SetLayer(nlayer)
-        SelectByLinks(linkSet_nodes, "Several", linkSet, )
+        SelectByLinks(link_set_nodes, "Several", link_set, )
 
         // Select all links within the buffer distance of the current project
         // link and collect their link IDs.  Don't include links from the
@@ -541,29 +819,29 @@ Macro "old"
         SetLayer(llayer)
         opts = null
         opts.Inclusion = "Intersecting"
-        opts.[Source Not] = projectSet
+        opts.[Source Not] = project_set
         SelectByVicinity(
-          linkBufferSet, "Several", llayer + "|" + linkSet, buffer, opts
+          link_buffer_set, "Several", llayer + "|" + link_set, buffer, opts
         )
 
         // Collect ID information on the buffer links and create a table.
-        v_bufferLinkIDs = GetDataVector(llayer + "|" + linkBufferSet, "ID", opts)
-        v_bufferLink_fnode = GetDataVector(
-          llayer + "|" + linkBufferSet, "from_node", opts
+        v_buffer_link_ids = GetDataVector(llayer + "|" + link_buffer_set, "ID", opts)
+        v_buffer_link_fnode = GetDataVector(
+          llayer + "|" + link_buffer_set, "from_node", opts
         )
-        v_bufferLink_tnode = GetDataVector(
-          llayer + "|" + linkBufferSet, "to_node", opts
+        v_buffer_link_tnode = GetDataVector(
+          llayer + "|" + link_buffer_set, "to_node", opts
         )
         buffer_tbl = null
-        buffer_tbl.link_id = v_bufferLinkIDs
-        buffer_tbl.from_node = v_bufferLink_fnode
-        buffer_tbl.to_node = v_bufferLink_tnode
+        buffer_tbl.link_id = v_buffer_link_ids
+        buffer_tbl.from_node = v_buffer_link_fnode
+        buffer_tbl.to_node = v_buffer_link_tnode
 
         // Select the buffer link's nodes as well. Allow the current link's
         // nodes to be selected, too.  Distances used are link-to-link, and
         // are calculated by averaging node distances.
         SetLayer(nlayer)
-        SelectByLinks(linkBufferSet_nodes, "Several", linkBufferSet, )
+        SelectByLinks(link_buffer_set_nodes, "Several", link_buffer_set, )
 
         // Create indices for proj link nodes and buffer nodes
         // Delete any that already exist
@@ -572,13 +850,13 @@ Macro "old"
         if ArrayPosition(a_ind_names, {"proj_link"}, ) <> 0 then
           DeleteMatrixIndex(mtx, "proj_link")
         link_index = CreateMatrixIndex(
-          "proj_link", mtx, "Both", nlayer + "|" + linkSet_nodes,
+          "proj_link", mtx, "Both", nlayer + "|" + link_set_nodes,
           "ID", "ID"
         )
         if ArrayPosition(a_ind_names, {"buffer_link"}, ) <> 0 then
           DeleteMatrixIndex(mtx, "buffer_link")
         buffer_index = CreateMatrixIndex(
-          "buffer_link", mtx, "Both", nlayer + "|" + linkBufferSet_nodes,
+          "buffer_link", mtx, "Both", nlayer + "|" + link_buffer_set_nodes,
           "ID", "ID"
         )
 
@@ -595,48 +873,48 @@ Macro "old"
         // and in both directions (4 vectors)
         SetLayer(llayer)
         a_nodes = GetEndpoints(id)
-        DIST = null
+        dist = null
         opts = null
         opts.Index = "Row"
-        DIST.buffer_node = GetMatrixVector(to_link_cur, opts)
-        DIST.buffer_node.rowbased  ="True"
+        dist.buffer_node = GetMatrixVector(to_link_cur, opts)
+        dist.buffer_node.rowbased  ="True"
         for n = 1 to a_nodes.length do
           node = a_nodes[n]
 
           opts = null
           opts.Row = node
-          DIST.("from_" + String(node)) = GetMatrixVector(from_link_cur, opts)
-          DIST.("from_" + String(node)).rowbased = "True"
+          dist.("from_" + String(node)) = GetMatrixVector(from_link_cur, opts)
+          dist.("from_" + String(node)).rowbased = "True"
           opts = null
           opts.Column = node
-          DIST.("to_" + String(node)) = GetMatrixVector(to_link_cur, opts)
-          DIST.("to_" + String(node)).rowbased = "True"
+          dist.("to_" + String(node)) = GetMatrixVector(to_link_cur, opts)
+          dist.("to_" + String(node)).rowbased = "True"
         end
 
-        DIST.min_to = min(DIST.("to_" + String(a_nodes[1])), DIST.("to_" + String(a_nodes[2])))
-        DIST.min_from = min(DIST.("from_" + String(a_nodes[1])), DIST.("from_" + String(a_nodes[2])))
-        DIST.direction = if DIST.min_to < DIST.min_from then "to" else "from"
-        DIST.min_dist = min(DIST.min_to, DIST.min_from)
-        DIST.max_dist = if DIST.direction = "to"
-          then max(DIST.("to_" + String(a_nodes[1])), DIST.("to_" + String(a_nodes[2])))
-          else max(DIST.("from_" + String(a_nodes[1])), DIST.("from_" + String(a_nodes[2])))
+        dist.min_to = min(dist.("to_" + String(a_nodes[1])), dist.("to_" + String(a_nodes[2])))
+        dist.min_from = min(dist.("from_" + String(a_nodes[1])), dist.("from_" + String(a_nodes[2])))
+        dist.direction = if dist.min_to < dist.min_from then "to" else "from"
+        dist.min_dist = min(dist.min_to, dist.min_from)
+        dist.max_dist = if dist.direction = "to"
+          then max(dist.("to_" + String(a_nodes[1])), dist.("to_" + String(a_nodes[2])))
+          else max(dist.("from_" + String(a_nodes[1])), dist.("from_" + String(a_nodes[2])))
 
         // To check/debug the distance table calculations
         if p = 1 and i = 1
           then RunMacro(
-            "Write Table", DIST, output_dir +
+            "Write Table", dist, output_dir +
             "/check distance calc - proj 1 link 1.csv"
           )
 
-        // Join the DIST table to the buffer table twice - once for each node
+        // Join the dist table to the buffer table twice - once for each node
         // on the buffer link
         // The average distance is calculated from both buffer link nodes to
         // the nearest project node.  This removes bias against long project
         // links.
-        DIST = RunMacro("Select", DIST, {"buffer_node", "min_dist"})
-        buffer_tbl = RunMacro("Join Tables", buffer_tbl, "from_node", DIST, "buffer_node")
+        dist = RunMacro("Select", dist, {"buffer_node", "min_dist"})
+        buffer_tbl = RunMacro("Join Tables", buffer_tbl, "from_node", dist, "buffer_node")
         buffer_tbl = RunMacro("Rename Field", buffer_tbl, "min_dist", "min_dist1")
-        buffer_tbl = RunMacro("Join Tables", buffer_tbl, "to_node", DIST, "buffer_node")
+        buffer_tbl = RunMacro("Join Tables", buffer_tbl, "to_node", dist, "buffer_node")
         buffer_tbl = RunMacro("Rename Field", buffer_tbl, "min_dist", "min_dist2")
         buffer_tbl.avg_dist = (buffer_tbl.min_dist1 + buffer_tbl.min_dist2) / 2
 
@@ -646,8 +924,8 @@ Macro "old"
         DATA.BufferLinkID = buffer_tbl.link_id
 
         // Collect secondary info and add to table
-        ABSecBen = GetDataVector(llayer + "|" + linkBufferSet, "ABSecBen", )
-        BASecBen = GetDataVector(llayer + "|" + linkBufferSet, "BASecBen", )
+        ABSecBen = GetDataVector(llayer + "|" + link_buffer_set, "ABSecBen", )
+        BASecBen = GetDataVector(llayer + "|" + link_buffer_set, "BASecBen", )
         SecBen = ABSecBen + BASecBen
         DATA.SecondaryBenefit = SecBen
 
@@ -655,21 +933,21 @@ Macro "old"
         // Add vmt change
         opts = null
 
-        opts.Constant = projID
-        type = if TypeOf(projID) = "string" then "string" else "Long"
-        v_temp = Vector(v_bufferLinkIDs.length, type, opts)
-        DATA.projID = v_temp
+        opts.Constant = proj_id
+        type = if TypeOf(proj_id) = "string" then "string" else "Long"
+        v_temp = Vector(v_buffer_link_ids.length, type, opts)
+        DATA.proj_id = v_temp
 
         opts.Constant = id
-        v_temp = Vector(v_bufferLinkIDs.length, "Long", opts)
+        v_temp = Vector(v_buffer_link_ids.length, "Long", opts)
         DATA.projLinkID = v_temp
 
         opts.Constant = vmt_change
-        v_temp = Vector(v_bufferLinkIDs.length, "Double", opts)
+        v_temp = Vector(v_buffer_link_ids.length, "Double", opts)
         DATA.vmt_change = v_temp
 
         opts.Constant = buffer
-        v_temp = Vector(v_bufferLinkIDs.length, "Double", opts)
+        v_temp = Vector(v_buffer_link_ids.length, "Double", opts)
         DATA.buffer = v_temp
 
         // Add distance and distance decay info
@@ -739,7 +1017,7 @@ Macro "old"
 
     agg = null
     agg.final = {"sum"}
-    secondary_tbl = RunMacro("Summarize", FINAL, {"projID"}, agg)
+    secondary_tbl = RunMacro("Summarize", FINAL, {"proj_id"}, agg)
     secondary_tbl = RunMacro(
       "Rename Field", secondary_tbl, "sum_final", "secondary_benefits"
     )
@@ -763,21 +1041,21 @@ Macro "old"
     v_projPrimeBen = Vector(v_projid.length,"Float",{{"Constant",0}})
 
     for i = 1 to v_projid.length do
-      projID = v_projid[i]
+      proj_id = v_projid[i]
 
       // VMT Change
-      v_tempVMT = if ( v_allprojid = projID ) then v_length * (v_ABVolDiff + v_BAVolDiff) else 0
+      v_tempVMT = if ( v_allprojid = proj_id ) then v_length * (v_ABVolDiff + v_BAVolDiff) else 0
       vmt = VectorStatistic(v_tempVMT,"Sum",)
 
       // CMA Change
-      v_tempCMA = if ( v_allprojid = projID ) then v_length * (v_ABCapDiff + v_BACapDiff) else 0
+      v_tempCMA = if ( v_allprojid = proj_id ) then v_length * (v_ABCapDiff + v_BACapDiff) else 0
       cma = VectorStatistic(v_tempCMA,"Sum",)
 
       v_projVMTDiff[i] = vmt
       v_projCMADiff[i] = cma
 
       // Primary Benefits
-      v_tempBen = if ( v_allprojid = projID ) then (v_ab_prim_ben + v_ba_prim_ben) else 0
+      v_tempBen = if ( v_allprojid = proj_id ) then (v_ab_prim_ben + v_ba_prim_ben) else 0
       primeBen = VectorStatistic(v_tempBen,"Sum",)
 
       v_projPrimeBen[i] = primeBen
@@ -795,7 +1073,7 @@ Macro "old"
 
     // Join the secondary benefit information to that table
     // and calculate total benefits
-    RESULT = RunMacro("Join Tables", RESULT, "proj_id", secondary_tbl, "projID")
+    RESULT = RunMacro("Join Tables", RESULT, "proj_id", secondary_tbl, "proj_id")
     RESULT.total_benefits = RESULT.primary_benefits + RESULT.secondary_benefits
 
     RunMacro(
