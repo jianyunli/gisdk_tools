@@ -1144,6 +1144,8 @@ Class "df" (tbl)
   Macro "left_join" (slave_tbl, m_id, s_id) do
 
     // Argument check
+    self.check()
+    slave_tbl.check()
     if TypeOf(m_id) = "string" then m_id = {m_id}
     if TypeOf(s_id) = "string" then s_id = {s_id}
     if m_id.length <> s_id.length then
