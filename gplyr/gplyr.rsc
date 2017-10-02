@@ -146,34 +146,55 @@ Class "df" (tbl)
 
   Use rename() to change individual column names
 
-  names
-    Array or vector of strings
-    If provided, the method will set the column names instead of
-    retrieve them
+  MacroOpts
+    Named array containing all method arguments
+
+      new_names
+        Array or vector of strings
+        If provided, the method will set the column new_names instead of
+        retrieve them
+
+      start
+        String
+        Name of first column you want returned.
+
+      stop
+        String
+        Name of last column you want returned.
   */
-  Macro "colnames" (names) do
+  Macro "colnames" (MacroOpts) do
+
+    // Argument extraction
+    new_names = MacroOpts.new_names
+    start = MacroOpts.start
+    stop = MacroOpts.stop
 
     // Argument checking
     if self.is_empty() then return()
-    if names <> null then do
-      if TypeOf(names) = "vector" then names = V2A(names)
-      if TypeOf(names) <> "array" then
-        Throw("colnames: if provided, 'names' argument must be a vector or array")
-      if names.length <> self.ncol() then
-        Throw("colnames: 'names' length does not match number of columns")
+    if new_names <> null then do
+      if TypeOf(new_names) = "vector" then new_names = V2A(new_names)
+      if TypeOf(new_names) <> "array" then
+        Throw("colnames: if provided, 'new_names' argument must be a vector or array")
+      if new_names.length <> self.ncol() and start = null and stop = null then
+        Throw("colnames: 'new_names' length does not match number of columns")
+    end
+    if start = null then start = self.tbl[1][1]
+    if stop = null then stop = self.tbl[self.ncol()][1]
+
+    for c = 1 to self.ncol() do
+      col_name = self.tbl[c][1]
+      if col_name = start then start = "true"
+
+      if start and !stop then do
+        if new_names = null
+          then a_colnames = a_colnames + {col_name}
+          else self.tbl[c][1] = new_names[c]
+      end
+
+      if col_name = stop then stop = "true"
     end
 
-    if names = null then do
-      for c = 1 to self.ncol() do
-        a_colnames = a_colnames + {self.tbl[c][1]}
-      end
-    end else do
-      for c = 1 to names.length do
-        self.tbl[c][1] = names[c]
-      end
-    end
-
-    if names = null then return(A2V(a_colnames))
+    if new_names = null then return(A2V(a_colnames))
   EndItem
 
   /*
@@ -1736,17 +1757,29 @@ Macro "test gplyr"
   // test colnames
   df = CreateObject("df")
   df.read_mtx(mtx_file)
-  names = {"a", "b", "c", "d"}
-  df.colnames(names)
-  check = df.colnames()
-  for a = 1 to names.length do
-    if check[a] <> names[a] then Throw("test: colnames failed")
+  opts = null
+  opts.new_names = {"a", "b", "c", "d"}
+  df.colnames(opts)
+  answer = df.colnames()
+  for a = 1 to opts.new_names.length do
+    if answer[a] <> opts.new_names[a] then Throw("test: colnames failed")
   end
   // test 2 (checks to make sure reserved name Length is handled)
   df = CreateObject("df")
   df.read_csv(csv_file)
   names = df.colnames()
   answer = {"Size", "Color", "Count", "Length"}
+  for a = 1 to names.length do
+    if names[a] <> answer[a] then Throw("test: colnames failed")
+  end
+  // test 3 makes sure that start/stop options work
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  opts = null
+  opts.start = "Color"
+  opts.stop = "Count"
+  names = df.colnames(opts)
+  answer = {"Color", "Count"}
   for a = 1 to names.length do
     if names[a] <> answer[a] then Throw("test: colnames failed")
   end
