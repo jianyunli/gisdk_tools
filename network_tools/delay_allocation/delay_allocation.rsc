@@ -227,6 +227,7 @@ Macro "da classify benefits"
   data_b = MacroOpts.data_b
   data_nb = MacroOpts.data_nb
   params = MacroOpts.params
+  output_dir = MacroOpts.output_dir
 
   tot_cap_diff = data_b.get_vector("tot_cap_diff")
   tot_vol_diff = data_b.get_vector("tot_vol_diff")
@@ -330,42 +331,16 @@ Macro "da classify benefits"
     data_b.mutate("ba_sec_ben", nz(v_ba_sec_ben))
 
     MacroOpts.data_b = data_b
+
+    // Check calculations in debug mode
+    if MacroOpts.debug = 1 then data_b.write_csv(
+      output_dir + "debug_link_classification.csv"
+    )
 EndMacro
 
 // Previous code implementing delay allocation method
 
 Macro "old"
-
-
-
-    // Check calculation in debug mode
-    if Args.General.debug = 1 then do
-      path = SplitPath(hwy_b)
-      output_dir = path[1] + path[2] + "\\BenefitCalculation\\"
-      testCSV = output_dir + "TestLinkCategoryLogic.csv"
-      file = OpenFile(testCSV,"w")
-      WriteLine(file,"ProjID,nbCap,totDelayDiff,totCapDiff,totVolDiff,Type,abCapRatio,baCapRatio,abVolRatio,baVolRatio,abPrimBen,baPrimBen,abSecBen,baSecBen")
-      for i = 1 to v_category.length do
-        pID = v_allprojid[i]
-        pID = if TypeOf(pID) <> "string" then String(pID) else pID
-        WriteLine(file, pID + "," + String(v_nbABCap[i] + v_nbBACap[i]) + "," + String(v_totDelayDiff[i]) + "," + String(v_totCapDiff[i]) + "," + String(v_totVolDiff[i])
-          + "," + v_category[i] + "," + String(v_abcapratio[i]) + "," + String(v_bacapratio[i]) + "," + String(v_abvolratio[i]) + "," + String(v_bavolratio[i]) + "," + String(v_ab_prim_ben[i]) + "," + String(v_ba_prim_ben[i])
-          + "," + String(v_ab_sec_ben[i]) + "," + String(v_ba_sec_ben[i]))
-      end
-      CloseFile(file)
-    end
-
-    // For some reason, these equations can lead to "negative zero"
-    // results that sort as smaller than, for example, -80
-    // Doesn't make sense - Have to set them to 0
-    v_ab_prim_ben = if ( v_ab_prim_ben < .0001 and v_ab_prim_ben > -.0001 ) then 0
-      else v_ab_prim_ben
-    v_ba_prim_ben = if ( v_ba_prim_ben < .0001 and v_ba_prim_ben > -.0001 ) then 0
-      else v_ba_prim_ben
-    v_ab_sec_ben = if ( v_ab_sec_ben < .0001 and v_ab_sec_ben > -.0001 ) then 0
-      else v_ab_sec_ben
-    v_ba_sec_ben = if ( v_ba_sec_ben < .0001 and v_ba_sec_ben > -.0001 ) then 0
-      else v_ba_sec_ben
 
     // Modify the structure of the result hwy file
     // to add benefit-related fields
