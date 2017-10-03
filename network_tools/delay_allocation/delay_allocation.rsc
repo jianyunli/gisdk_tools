@@ -6,8 +6,8 @@ and "_nb" to no-build. "_o" will refer to the output.
 */
 
 Macro "Delay Allocation" (Args)
-  shared MacroOpts
-  MacroOpts = Args // handles GISDK memory error
+  shared shared_args
+  shared_args = Args // handles GISDK memory error
 
   RunMacro("Close All")
   //CreateProgressBar("Delay Allocation", "True")
@@ -17,20 +17,21 @@ Macro "Delay Allocation" (Args)
   RunMacro("da initial calculations")
   RunMacro("da classify benefits")
   RunMacro("da allocate secondary benefits")
+  RunMacro("da allocate primary benefits")
 
   RunMacro("Close All")
   //DestroyProgressBar()
 EndMacro
 
 /*
-Adds variables to MacroOpts that will be used my multiple macros
+Adds variables to shared_args that will be used my multiple macros
 */
 
 Macro "da create variables"
-  shared MacroOpts
+  shared shared_args
 
   // output highway file
-  MacroOpts.hwy_o = MacroOpts.output_dir + "/delay_allocation.dbd"
+  shared_args.hwy_o = shared_args.output_dir + "/delay_allocation.dbd"
 EndMacro
 
 /*
@@ -38,14 +39,14 @@ EndMacro
 */
 
 Macro "da initial calculations"
-  shared MacroOpts
+  shared shared_args
 
   // Extract arguments
-  hwy_b = MacroOpts.hwy_b
-  hwy_nb = MacroOpts.hwy_nb
-  param_file = MacroOpts.param_file
-  output_dir = MacroOpts.output_dir
-  hwy_o = MacroOpts.hwy_o
+  hwy_b = shared_args.hwy_b
+  hwy_nb = shared_args.hwy_nb
+  param_file = shared_args.param_file
+  output_dir = shared_args.output_dir
+  hwy_o = shared_args.hwy_o
 
   // Argument check
   if hwy_b = null then Throw("Delay Allocation: 'hwy_b' is missing")
@@ -162,10 +163,10 @@ Macro "da initial calculations"
   v_projid = df.get_vector(params.projid_field)
 
   // Store results in shared variable
-  MacroOpts.data_b = data_b
-  MacroOpts.data_nb = data_nb
-  MacroOpts.params = params
-  MacroOpts.v_projid = v_projid
+  shared_args.data_b = data_b
+  shared_args.data_nb = data_nb
+  shared_args.params = params
+  shared_args.v_projid = v_projid
 EndMacro
 
 /*
@@ -222,14 +223,14 @@ other links.
 */
 
 Macro "da classify benefits"
-  shared MacroOpts
+  shared shared_args
 
   // Extract arguments to shorten names
-  data_b = MacroOpts.data_b
-  data_nb = MacroOpts.data_nb
-  params = MacroOpts.params
-  output_dir = MacroOpts.output_dir
-  hwy_o = MacroOpts.hwy_o
+  data_b = shared_args.data_b
+  data_nb = shared_args.data_nb
+  params = shared_args.params
+  output_dir = shared_args.output_dir
+  hwy_o = shared_args.hwy_o
 
   tot_cap_diff = data_b.get_vector("tot_cap_diff")
   tot_vol_diff = data_b.get_vector("tot_vol_diff")
@@ -331,7 +332,7 @@ Macro "da classify benefits"
     data_b.mutate("ba_prim_ben", nz(v_ba_prim_ben))
     data_b.mutate("ab_sec_ben", nz(v_ab_sec_ben))
     data_b.mutate("ba_sec_ben", nz(v_ba_sec_ben))
-    MacroOpts.data_b = data_b
+    shared_args.data_b = data_b
 
     // Update the output highway layer
     update_df = data_b.copy()
@@ -352,14 +353,14 @@ EndMacro
 */
 
 Macro "da allocate secondary benefits"
-  shared MacroOpts
+  shared shared_args
 
   // Extract arguments to shorten names
-  params = MacroOpts.params
-  hwy_o = MacroOpts.hwy_o
-  data_b = MacroOpts.data_b
-  output_dir = MacroOpts.output_dir
-  v_projid = MacroOpts.v_projid
+  params = shared_args.params
+  hwy_o = shared_args.hwy_o
+  data_b = shared_args.data_b
+  output_dir = shared_args.output_dir
+  v_projid = shared_args.v_projid
 
   // Add fields to the output highway layer
   {nlyr, llyr} = GetDBLayers(hwy_o)
@@ -619,7 +620,7 @@ Macro "da allocate secondary benefits"
 
       // To check/debug the distance table calculations
       dist_df = CreateObject("df", dist)
-      if p = 1 and i = 1 and MacroOpts.debug then do
+      if p = 1 and i = 1 and shared_args.debug then do
         dist_df.write_csv(
           output_dir + "/debug - distance calc for proj " +
           proj_id + " link 1.csv"
@@ -740,7 +741,7 @@ Macro "da allocate secondary benefits"
     "final",
     secondary_df.tbl.pct * secondary_df.tbl.secondary_benefit
   )
-  if MacroOpts.debug then secondary_df.write_csv(
+  if shared_args.debug then secondary_df.write_csv(
     output_dir + "/debug - secondary benefit assignment.csv"
   )
   agg = null
@@ -748,11 +749,20 @@ Macro "da allocate secondary benefits"
   secondary_df.group_by("proj_id")
   secondary_df.summarize(agg)
   secondary_df.rename("sum_final", "secondary_benefits")
-  secondary_df.create_editor()
+
+  shared_args.secondary_df = secondary_df
 
   RunMacro("Close All")
 EndMacro
 
+/*
+
+*/
+
+Macro "da allocate primary benefits"
+  shared shared_args
+
+EndMacro
 
 // Previous code implementing delay allocation method
 
