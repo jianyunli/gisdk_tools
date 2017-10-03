@@ -1138,7 +1138,8 @@ Class "df" (tbl)
   m_id and s_id
     String or array
     The id fields from master and slave to use for join.  Use an array to
-    specify multiple fields to join by.
+    specify multiple fields to join by. If s_id is null, it is assumed to
+    be the same as m_id.
   */
 
   Macro "left_join" (slave_tbl, m_id, s_id) do
@@ -1146,6 +1147,7 @@ Class "df" (tbl)
     // Argument check
     self.check()
     slave_tbl.check()
+    if s_id = null then s_id = m_id
     if TypeOf(m_id) = "string" then m_id = {m_id}
     if TypeOf(s_id) = "string" then s_id = {s_id}
     if m_id.length <> s_id.length then
