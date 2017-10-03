@@ -707,7 +707,49 @@ Macro "da allocate secondary benefits"
     DestroyProgressBar()
   end
 
+
+  // Apportion secondary benefits
+  temp = secondary_df.copy()
+  temp.group_by("buffer_link_id")
+  agg = null
+  agg.vmt_change = {"sum"}
+  agg.dist_weight = {"sum"}
+  temp.summarize(agg)
+  secondary_df.left_join(temp, "buffer_link_id")
+  secondary_df.mutate(
+    "pct_vmt", secondary_df.tbl.vmt_change / secondary_df.tbl.sum_vmt_change
+  )
+  secondary_df.mutate(
+    "pct_dist_weight",
+    secondary_df.tbl.dist_weight / secondary_df.tbl.sum_dist_weight
+  )
+  secondary_df.mutate(
+    "combined",
+    secondary_df.tbl.pct_vmt * secondary_df.tbl.pct_dist_weight
+  )
+  agg = null
+  agg.combined = {"sum"}
+  temp = secondary_df.copy()
+  temp.group_by("buffer_link_id")
+  temp.summarize(agg)
+  secondary_df.left_join(temp, "buffer_link_id")
+  secondary_df.mutate(
+    "pct", secondary_df.tbl.combined * secondary_df.tbl.sum_combined
+  )
+  secondary_df.mutate(
+    "final",
+    secondary_df.tbl.pct * secondary_df.tbl.secondary_benefit
+  )
+  if MacroOpts.debug then secondary_df.write_csv(
+    output_dir + "/debug - secondary benefit assignment.csv"
+  )
+  agg = null
+  agg.final = {"sum"}
+  secondary_df.group_by("proj_id")
+  secondary_df.summarize(agg)
+  secondary_df.rename("sum_final", "secondary_benefits")
   secondary_df.create_editor()
+
   RunMacro("Close All")
 EndMacro
 
@@ -716,47 +758,6 @@ EndMacro
 
 Macro "old"
 
-    /*
-    Secondary benefit allocation
-    */
-
-    // Use the tables library to vectorize and write out data
-    /*data = RunMacro("Vectorize Table", data)
-    RunMacro("Write Table", data, output_dir + "test.csv")*/
-
-    // Use the tables library to apportion benefits
-    agg = null
-    agg.vmt_change = {"sum"}
-    agg.dist_weight = {"sum"}
-    summary = RunMacro("Summarize", secondary_df, {"buffer_link_id"}, agg)
-    /*summary = RunMacro(
-      "Select", {"buffer_link_id", "sum_vmt_change", "sum_DistWeight"}
-    )*/
-    secondary_df = RunMacro("Join Tables", secondary_df, "buffer_link_id", summary, "buffer_link_id")
-    secondary_df.pct_vmt = secondary_df.vmt_change / secondary_df.sum_vmt_change
-    secondary_df.pct_distweight = secondary_df.dist_weight / secondary_df.sum_DistWeight
-    secondary_df.combined = secondary_df.pct_vmt * secondary_df.pct_distweight
-
-    agg = null
-    agg.combined = {"sum"}
-    summary2 = RunMacro("Summarize", secondary_df, {"buffer_link_id"}, agg)
-    /*summary2 = RunMacro("Select", {"buffer_link_id", "sum_combined"})*/
-    secondary_df = RunMacro("Join Tables", secondary_df, "buffer_link_id", summary2, "buffer_link_id")
-    secondary_df.pct = secondary_df.combined / secondary_df.sum_combined
-    secondary_df.final = secondary_df.pct * secondary_df.secondary_benefit
-    // Write out intermediate table for checking
-    RunMacro(
-      "Write Table", secondary_df,
-      output_dir + "check secondary benefit assignment.csv"
-    )
-
-    agg = null
-    agg.final = {"sum"}
-    secondary_tbl = RunMacro("Summarize", secondary_df, {"proj_id"}, agg)
-    secondary_tbl = RunMacro(
-      "Rename Field", secondary_tbl, "sum_final", "secondary_benefits"
-    )
-    secondary_tbl.Count = null
 
     /*
     --------------------------------------------------------------
