@@ -962,8 +962,19 @@ Macro "test da"
   opts.debug = "true"
   RunMacro("Delay Allocation", opts)
 
-  // Delete the output folder after checking results
-  // RunMacro("Delete Directory", opts.output_dir)
+  // Check results against the unit test answer key
+  answers = CreateObject("df")
+  answers.read_csv(test_dir + "/answer_key.csv")
+  results = CreateObject("df")
+  results.read_csv(opts.output_dir + "/project_benefits.csv")
+  check = answers.tbl.total_benefits - results.tbl.total_benefits
+  check = VectorStatistic(check, "sum", )
 
-  ShowMessage("Complete")
+  if check <> 0
+    then ShowMessage("Results did not match answer key")
+    else do
+      // Delete the output folder after checking results
+      // RunMacro("Delete Directory", opts.output_dir)
+      ShowMessage("Unit test successful")
+    end
 EndMacro
