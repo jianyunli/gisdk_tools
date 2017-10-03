@@ -10,28 +10,16 @@ Macro "Delay Allocation" (Args)
   shared_args = Args // handles GISDK memory error
 
   RunMacro("Close All")
-  //CreateProgressBar("Delay Allocation", "True")
+  CreateProgressBar("Delay Allocation", "True")
 
   // Steps
-  RunMacro("da create variables")
   RunMacro("da initial calculations")
   RunMacro("da classify benefits")
   RunMacro("da allocate secondary benefits")
   RunMacro("da allocate primary benefits")
 
   RunMacro("Close All")
-  //DestroyProgressBar()
-EndMacro
-
-/*
-Adds variables to shared_args that will be used my multiple macros
-*/
-
-Macro "da create variables"
-  shared shared_args
-
-  // output highway file
-  shared_args.hwy_o = shared_args.output_dir + "/delay_allocation.dbd"
+  DestroyProgressBar()
 EndMacro
 
 /*
@@ -46,7 +34,6 @@ Macro "da initial calculations"
   hwy_nb = shared_args.hwy_nb
   param_file = shared_args.param_file
   output_dir = shared_args.output_dir
-  hwy_o = shared_args.hwy_o
 
   // Argument check
   if hwy_b = null then Throw("Delay Allocation: 'hwy_b' is missing")
@@ -59,6 +46,8 @@ Macro "da initial calculations"
 
   // Create the output directory
   if GetDirectoryInfo(output_dir, "All") = null then CreateDirectory(output_dir)
+  hwy_o = shared_args.output_dir + "/delay_allocation.dbd"
+  shared_args.hwy_o = hwy_o
 
   // Create a copy of the all-build dbd without centroid connectors
   // (Exporting is much faster than copying and deleting links)
@@ -708,8 +697,8 @@ Macro "da allocate secondary benefits"
     DestroyProgressBar()
   end
 
-
   // Apportion secondary benefits
+  UpdateProgressBar("Allocating secondary benefits", 0)
   temp = secondary_df.copy()
   temp.group_by("buffer_link_id")
   agg = null
@@ -766,14 +755,19 @@ Utilization: VMT / CMA
 
 Macro "da allocate primary benefits"
   shared shared_args
+  UpdateProgressBar("Allocating primary benifits", 0)
 
   // Extract arguments to shorten names
   v_projid = shared_args.v_projid
   data_b = shared_args.data_b
   params = shared_args.params
+  secondary_df = shared_args.secondary_df
+  output_dir = shared_args.output_dir
 
-  primary_df = secondary_df.copy()
-  primary_df.filter(params.projid_field + " <> null")
+  // Calculate the primary benefit table
+  primary_df = data_b.copy()
+  primary_df.rename(params.projid_field, "proj_id")
+  primary_df.filter("proj_id <> null")
   primary_df.mutate(
     "vmt_diff", primary_df.tbl.tot_vol_diff * primary_df.get_vector("Length")
   )
@@ -783,122 +777,39 @@ Macro "da allocate primary benefits"
   primary_df.mutate(
     "primary_benefits", primary_df.tbl.ab_prim_ben + primary_df.tbl.ba_prim_ben
   )
-  primary_df.group_by(params.projid_field)
+  primary_df.group_by("proj_id")
   agg = null
   agg.primary_benefits = {"sum"}
   agg.vmt_diff = {"sum"}
   agg.cma_diff = {"sum"}
   primary_df.summarize(agg)
-  primary_df.rename({"sum_vmt_diff", "sum_cma_diff"}, {"vmt_diff", "cma_diff"})
+  primary_df.rename(
+    {"sum_primary_benefits", "sum_vmt_diff", "sum_cma_diff"},
+    {"primary_benefits", "vmt_diff", "cma_diff"}
+  )
   primary_df.mutate(
     "utilization", primary_df.tbl.vmt_diff / primary_df.tbl.cma_diff
   )
+  primary_df.filter("cma_diff > 0")
 
-  
-EndMacro
+  // Join the secondary benefits to the primary and write out
+  primary_df.left_join(secondary_df, "proj_id")
+  primary_df.mutate("total_benefits",
+    primary_df.tbl.primary_benefits + primary_df.tbl.secondary_benefits
+  )
+  primary_df.write_csv(output_dir + "/project_benefits.csv")
 
-// Previous code implementing delay allocation method
-
-Macro "old"
-
-
-
-
-    // Utilization
-    v_projUtil = v_proj_vmt_diff / v_proj_cma_diff
-
-    // Create a final table object
-    a_colNames = {"proj_id", "vmt_diff", "cap_diff",
-      "utilization", "primary_benefits"}
-    a_data = {v_projid, v_proj_vmt_diff, v_proj_cma_diff,
-      v_projUtil, v_proj_prime_ben}
-    RESULT = RunMacro("Create Table", a_colNames, a_data)
-
-    // Join the secondary benefit information to that table
-    // and calculate total benefits
-    RESULT = RunMacro("Join Tables", RESULT, "proj_id", secondary_tbl, "proj_id")
-    RESULT.total_benefits = RESULT.primary_benefits + RESULT.secondary_benefits
-
-    RunMacro(
-      "Write Table", RESULT,
-      output_dir + "final results.csv"
-    )
-
-    // Show warning if the delay increased from no-build to build
-    v_totalDelayDiff = v_ab_delay_diff + v_ba_delay_diff
-    if VectorStatistic(v_totalDelayDiff,"sum",) > 0 then do
-      warningString = "Warning: Total delay increased from no-build " +
-        "to build scenarios."
-      ShowMessage(warningString)
-    end
-
-    DestroyProgressBar()
-    ShowMessage("Done calculating benefits")
-    quit:
-
+  DestroyProgressBar()
 EndMacro
 
 /*
-This macro takes an open highway layer (in a map) and a project id.
-Exports the project links to a project layer.
-Returns a vector describing the distance of every link in the highway layer
-from the project layer.  Also appends the information to the highway layer
-in field "dist_2_proj".
+This macro is not used by the delay allocation method. It is used to prepare a
+csv table that can be used to estimate a distance profile for projects.  A no
+build scenario is required. Each comparison sceanrio must be the same as the
+no-build, but with one project added.
 
-map
-  String
-  name of open map
-
-llyr
-  String
-  Name of highway link layer
-
-set
-  String (Optional)
-  Name of selection of highway links to calc distance to the project
-
-p_id_field
-  String
-  Name of the field holding project IDs
-
-proj_id
-  String or Integer
-  Project ID to calc distance to
-*/
-
-Macro "Distance to Project" (map, llyr, set, p_id_field, proj_id)
-
-  SetLayer(llyr)
-  qry = "Select * where " + p_id_field + " = " +
-    (if TypeOf(proj_id) = "string" then "'" + proj_id + "'"
-    else String(proj_id))
-  n = SelectByQuery("proj", "Several", qry)
-  if n = 0 then Throw("No project records found")
-
-  file = GetTempFileName("*.dbd")
-  opts = null
-  opts.[Layer Name] = "temp"
-  ExportGeography(llyr + "|proj", file, opts)
-  {p_nlyr, p_llyr} = GetDBLayers(file)
-  AddLayer(map, p_llyr, file, p_llyr)
-
-  a_fields = {{"dist_2_proj", "Real", 10, 2, }}
-  RunMacro("TCB Add View Fields", {llyr, a_fields})
-
-  SetLayer(llyr)
-  TagLayer("Distance", llyr + "|" + set, "dist_2_proj", p_llyr, )
-
-  v_dist = GetDataVector(llyr + "|" + set, "dist_2_proj", )
-
-  DropLayer(map, p_llyr)
-  return(v_dist)
-Endmacro
-
-/*
-This macro is used to prepare a csv table that can be used to estimate
-a distance profile for projects.  A no build scenario is required. Each
-comparison sceanrio must be the same as the no-build, but with one
-project added.
+Use this to update/improve the distance delay function used by the delay
+allocation method.
 */
 
 Macro "Prepare Dist Est File"
@@ -969,24 +880,61 @@ Macro "Prepare Dist Est File"
 EndMacro
 
 /*
-Uses a skim matrix curreny and two link IDs and returns the
-distance between them.
+Helper for "Prepare Dist Est File" macro.
+This macro takes an open highway layer (in a map) and a project id.
+Exports the project links to a project layer.
+Returns a vector describing the distance of every link in the highway layer
+from the project layer.  Also appends the information to the highway layer
+in field "dist_2_proj".
+
+map
+  String
+  name of open map
+
+llyr
+  String
+  Name of highway link layer
+
+set
+  String (Optional)
+  Name of selection of highway links to calc distance to the project
+
+p_id_field
+  String
+  Name of the field holding project IDs
+
+proj_id
+  String or Integer
+  Project ID to calc distance to
 */
 
-Macro "Get Dist from Matrix" (a_id, b_id, mtx_cur)
+Macro "Distance to Project" (map, llyr, set, p_id_field, proj_id)
 
-  a_nodes = GetEndpoints(a_id)
-  b_nodes = GetEndpoints(b_id)
+  SetLayer(llyr)
+  qry = "Select * where " + p_id_field + " = " +
+    (if TypeOf(proj_id) = "string" then "'" + proj_id + "'"
+    else String(proj_id))
+  n = SelectByQuery("proj", "Several", qry)
+  if n = 0 then Throw("No project records found")
 
-  min_dist = 1000
-  for a = 1 to 2 do
-    for b = 1 to 2 do
-      dist = GetMatrixValue(mtx_cur, a_nodes[a], b_nodes[b])
-      if dist > 0 then min_dist = min(min_dist, dist)
-    end
-  end
+  file = GetTempFileName("*.dbd")
+  opts = null
+  opts.[Layer Name] = "temp"
+  ExportGeography(llyr + "|proj", file, opts)
+  {p_nlyr, p_llyr} = GetDBLayers(file)
+  AddLayer(map, p_llyr, file, p_llyr)
 
-EndMacro
+  a_fields = {{"dist_2_proj", "Real", 10, 2, }}
+  RunMacro("TCB Add View Fields", {llyr, a_fields})
+
+  SetLayer(llyr)
+  TagLayer("Distance", llyr + "|" + set, "dist_2_proj", p_llyr, )
+
+  v_dist = GetDataVector(llyr + "|" + set, "dist_2_proj", )
+
+  DropLayer(map, p_llyr)
+  return(v_dist)
+Endmacro
 
 /*
 This macro reads the example data and parameters in the GT repository, performs
@@ -1017,5 +965,5 @@ Macro "test da"
   // Delete the output folder after checking results
   // RunMacro("Delete Directory", opts.output_dir)
 
-  ShowMessage("Passed Tests")
+  ShowMessage("Complete")
 EndMacro
