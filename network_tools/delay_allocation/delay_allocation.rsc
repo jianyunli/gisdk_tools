@@ -756,12 +756,45 @@ Macro "da allocate secondary benefits"
 EndMacro
 
 /*
+Assigns primary benefits to projects. Also calculates other project-level
+metrics like:
 
+CMA: Capacity Miles Available - capacity * length
+VMT: Vehicle Miles Traveled - volume * length
+Utilization: VMT / CMA
 */
 
 Macro "da allocate primary benefits"
   shared shared_args
 
+  // Extract arguments to shorten names
+  v_projid = shared_args.v_projid
+  data_b = shared_args.data_b
+  params = shared_args.params
+
+  primary_df = secondary_df.copy()
+  primary_df.filter(params.projid_field + " <> null")
+  primary_df.mutate(
+    "vmt_diff", primary_df.tbl.tot_vol_diff * primary_df.get_vector("Length")
+  )
+  primary_df.mutate(
+    "cma_diff", primary_df.tbl.tot_cap_diff * primary_df.get_vector("Length")
+  )
+  primary_df.mutate(
+    "primary_benefits", primary_df.tbl.ab_prim_ben + primary_df.tbl.ba_prim_ben
+  )
+  primary_df.group_by(params.projid_field)
+  agg = null
+  agg.primary_benefits = {"sum"}
+  agg.vmt_diff = {"sum"}
+  agg.cma_diff = {"sum"}
+  primary_df.summarize(agg)
+  primary_df.rename({"sum_vmt_diff", "sum_cma_diff"}, {"vmt_diff", "cma_diff"})
+  primary_df.mutate(
+    "utilization", primary_df.tbl.vmt_diff / primary_df.tbl.cma_diff
+  )
+
+  
 EndMacro
 
 // Previous code implementing delay allocation method
@@ -769,52 +802,16 @@ EndMacro
 Macro "old"
 
 
-    /*
-    --------------------------------------------------------------
-    Step 3:
-    Calculate project-level metrics like VMT change and CMA change
-    --------------------------------------------------------------
-    */
 
-    // VMT - Vehicle Miles Traveled
-    // CMA - Capacity Miles Available (metric made up for this application)
-    //       Currently used to calculate utilization
-    // Util - "Utilization" or how much of the project is being used
-    // Prime - Primary benefits on the project links
-    // Change means the difference between build and no-build
-    v_projVMTDiff = Vector(v_projid.length,"Float",{{"Constant",0}})
-    v_projCMADiff = Vector(v_projid.length,"Float",{{"Constant",0}})
-    v_projPrimeBen = Vector(v_projid.length,"Float",{{"Constant",0}})
-
-    for i = 1 to v_projid.length do
-      proj_id = v_projid[i]
-
-      // VMT Change
-      v_tempVMT = if ( v_allprojid = proj_id ) then v_length * (v_ABVolDiff + v_BAVolDiff) else 0
-      vmt = VectorStatistic(v_tempVMT,"Sum",)
-
-      // CMA Change
-      v_tempCMA = if ( v_allprojid = proj_id ) then v_length * (v_ABCapDiff + v_BACapDiff) else 0
-      cma = VectorStatistic(v_tempCMA,"Sum",)
-
-      v_projVMTDiff[i] = vmt
-      v_projCMADiff[i] = cma
-
-      // Primary Benefits
-      v_tempBen = if ( v_allprojid = proj_id ) then (v_ab_prim_ben + v_ba_prim_ben) else 0
-      primeBen = VectorStatistic(v_tempBen,"Sum",)
-
-      v_projPrimeBen[i] = primeBen
-    end
 
     // Utilization
-    v_projUtil = v_projVMTDiff / v_projCMADiff
+    v_projUtil = v_proj_vmt_diff / v_proj_cma_diff
 
     // Create a final table object
     a_colNames = {"proj_id", "vmt_diff", "cap_diff",
       "utilization", "primary_benefits"}
-    a_data = {v_projid, v_projVMTDiff, v_projCMADiff,
-      v_projUtil, v_projPrimeBen}
+    a_data = {v_projid, v_proj_vmt_diff, v_proj_cma_diff,
+      v_projUtil, v_proj_prime_ben}
     RESULT = RunMacro("Create Table", a_colNames, a_data)
 
     // Join the secondary benefit information to that table
@@ -1003,7 +1000,7 @@ to point to the "unit_test" folder before testing. Try to avoid commiting that
 change to the repo.
 */
 
-Macro "da unit test"
+Macro "test da"
 
   test_dir = "Y:\\projects/gisdk_tools/repo/network_tools/delay_allocation/unit_test"
 
