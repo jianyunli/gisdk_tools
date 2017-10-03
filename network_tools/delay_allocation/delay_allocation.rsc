@@ -974,7 +974,7 @@ Macro "test da"
     then ShowMessage("Results did not match answer key")
     else do
       // Delete the output folder after checking results
-      // RunMacro("Delete Directory", opts.output_dir)
+      RunMacro("Delete Directory", opts.output_dir)
       ShowMessage("Unit test successful")
     end
 EndMacro
