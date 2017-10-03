@@ -1418,3 +1418,36 @@ Macro "Spatial Join" (MacroOpts)
   SetView(jv)
   return(jv)
 EndMacro
+
+/*
+Base GISDK has a RemoveDirectory(), but the directory must be empty.
+This macro will delete the directory including all contents using recursion.
+
+Inputs
+  dir
+    String
+    Complete path of the directory
+*/
+
+Macro "Delete Directory" (dir)
+
+  // If there are folders in the current directory,
+  // call the macro again for each one.
+  a_dir_info = GetDirectoryInfo(dir + "/*", "Directory")
+  if a_dir_info <> null then do
+    for d = 1 to a_dir_info.length do
+      path = dir + "/" + a_dir_info[d][1]
+
+      RunMacro("Delete Directory", path)
+    end
+  end
+
+  // Delete all files in the directory before deleting the directory itself
+  a_file_info = GetDirectoryInfo(dir + "/*", "File")
+  if a_file_info <> null then do
+    for i = 1 to a_file_info.length do
+      DeleteFile(dir + "/" + a_file_info[i][1])
+    end
+  end
+  RemoveDirectory(dir)
+EndMacro

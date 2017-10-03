@@ -146,34 +146,55 @@ Class "df" (tbl)
 
   Use rename() to change individual column names
 
-  names
-    Array or vector of strings
-    If provided, the method will set the column names instead of
-    retrieve them
+  MacroOpts
+    Named array containing all method arguments
+
+      new_names
+        Array or vector of strings
+        If provided, the method will set the column new_names instead of
+        retrieve them
+
+      start
+        String
+        Name of first column you want returned.
+
+      stop
+        String
+        Name of last column you want returned.
   */
-  Macro "colnames" (names) do
+  Macro "colnames" (MacroOpts) do
+
+    // Argument extraction
+    new_names = MacroOpts.new_names
+    start = MacroOpts.start
+    stop = MacroOpts.stop
 
     // Argument checking
     if self.is_empty() then return()
-    if names <> null then do
-      if TypeOf(names) = "vector" then names = V2A(names)
-      if TypeOf(names) <> "array" then
-        Throw("colnames: if provided, 'names' argument must be a vector or array")
-      if names.length <> self.ncol() then
-        Throw("colnames: 'names' length does not match number of columns")
+    if new_names <> null then do
+      if TypeOf(new_names) = "vector" then new_names = V2A(new_names)
+      if TypeOf(new_names) <> "array" then
+        Throw("colnames: if provided, 'new_names' argument must be a vector or array")
+      if new_names.length <> self.ncol() and start = null and stop = null then
+        Throw("colnames: 'new_names' length does not match number of columns")
+    end
+    if start = null then start = self.tbl[1][1]
+    if stop = null then stop = self.tbl[self.ncol()][1]
+
+    for c = 1 to self.ncol() do
+      col_name = self.tbl[c][1]
+      if col_name = start then start = "true"
+
+      if start and !stop then do
+        if new_names = null
+          then a_colnames = a_colnames + {col_name}
+          else self.tbl[c][1] = new_names[c]
+      end
+
+      if col_name = stop then stop = "true"
     end
 
-    if names = null then do
-      for c = 1 to self.ncol() do
-        a_colnames = a_colnames + {self.tbl[c][1]}
-      end
-    end else do
-      for c = 1 to names.length do
-        self.tbl[c][1] = names[c]
-      end
-    end
-
-    if names = null then return(A2V(a_colnames))
+    if new_names = null then return(A2V(a_colnames))
   EndItem
 
   /*
@@ -318,31 +339,31 @@ Class "df" (tbl)
   Changes the name of a column in a table object
 
   current_name
-    String or array of strings
-    current name of the field in the table
+    String, array, or vector of strings
+    current name(s) of the field in the table
   new_name
-    String or array of strings
-    desired new name of the field
-    if array, must be the same length as current_name
+    String, array, or vector of strings
+    desired new name(s) of the field
+    must be the same length as current_name
   */
 
   Macro "rename" (current_name, new_name) do
 
     // Argument checking
-    if TypeOf(current_name) <> TypeOf(new_name)
-      then Throw("rename: Current and new name must be same type")
-    if TypeOf(current_name) <> "string" then do
-      if TypeOf(current_name[1]) <> "string"
-        then Throw("rename: Field name arrays must contain strings")
-      if ArrayLength(current_name) <> ArrayLength(new_name)
-        then Throw("rename: Field name arrays must be same length")
-    end
-
-    // If a single field string, convert string to array
-    if TypeOf(current_name) = "string" then do
-      current_name = {current_name}
-      new_name = {new_name}
-    end
+    if !self.in(TypeOf(current_name), {"string", "vector", "array"})
+      then Throw("rename: 'current_name' must be string, array, or vector")
+    if !self.in(TypeOf(new_name), {"string", "vector", "array"})
+      then Throw("rename: 'new_name' must be string, array, or vector")
+    if TypeOf(current_name)  = "string" then current_name = {current_name}
+    if TypeOf(current_name)  = "vector" then current_name = V2A(current_name)
+    if TypeOf(new_name)  = "string" then new_name = {new_name}
+    if TypeOf(new_name)  = "vector" then new_name = V2A(new_name)
+    if ArrayLength(current_name) <> ArrayLength(new_name)
+      then Throw("rename: Field name arrays must be same length")
+    if TypeOf(current_name[1]) <> "string"
+      then Throw("rename: 'current_name' must contain strings")
+    if TypeOf(new_name[1]) <> "string"
+      then Throw("rename: 'new_name' must contain strings")
 
     for n = 1 to current_name.length do
       cName = current_name[n]
@@ -508,6 +529,9 @@ Class "df" (tbl)
     fields
       Optional string or array/vector of strings
       Array/Vector of columns to read. If null, all columns are read.
+    null_to_zero
+      Optional string (true/false)
+      Whether to convert null values to zero
   */
 
   Macro "read_view" (MacroOpts) do
@@ -515,6 +539,7 @@ Class "df" (tbl)
     view = MacroOpts.view
     set = MacroOpts.set
     fields = MacroOpts.fields
+    null_to_zero = MacroOpts.null_to_zero
 
     // Check for required arguments and
     // that data frame is currently empty
@@ -541,7 +566,9 @@ Class "df" (tbl)
     SelectByQuery("temp", "Several", qry)
     DeleteSet("temp")
 
-    data = GetDataVectors(view + "|" + set, fields, )
+    opts = null
+    opts.[Missing as Zero] = null_to_zero
+    data = GetDataVectors(view + "|" + set, fields, opts)
     for f = 1 to fields.length do
       field = fields[f]
       self.tbl.(field) = data[f]
@@ -1111,12 +1138,16 @@ Class "df" (tbl)
   m_id and s_id
     String or array
     The id fields from master and slave to use for join.  Use an array to
-    specify multiple fields to join by.
+    specify multiple fields to join by. If s_id is null, it is assumed to
+    be the same as m_id.
   */
 
   Macro "left_join" (slave_tbl, m_id, s_id) do
 
     // Argument check
+    self.check()
+    slave_tbl.check()
+    if s_id = null then s_id = m_id
     if TypeOf(m_id) = "string" then m_id = {m_id}
     if TypeOf(s_id) = "string" then s_id = {s_id}
     if m_id.length <> s_id.length then
@@ -1672,8 +1703,6 @@ Class "df" (tbl)
 
 endClass
 
-
-
 /*
 Unit test macro
 Runs through all the methods and writes out results. To use this macro, either:
@@ -1732,17 +1761,29 @@ Macro "test gplyr"
   // test colnames
   df = CreateObject("df")
   df.read_mtx(mtx_file)
-  names = {"a", "b", "c", "d"}
-  df.colnames(names)
-  check = df.colnames()
-  for a = 1 to names.length do
-    if check[a] <> names[a] then Throw("test: colnames failed")
+  opts = null
+  opts.new_names = {"a", "b", "c", "d"}
+  df.colnames(opts)
+  answer = df.colnames()
+  for a = 1 to opts.new_names.length do
+    if answer[a] <> opts.new_names[a] then Throw("test: colnames failed")
   end
   // test 2 (checks to make sure reserved name Length is handled)
   df = CreateObject("df")
   df.read_csv(csv_file)
   names = df.colnames()
   answer = {"Size", "Color", "Count", "Length"}
+  for a = 1 to names.length do
+    if names[a] <> answer[a] then Throw("test: colnames failed")
+  end
+  // test 3 makes sure that start/stop options work
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  opts = null
+  opts.start = "Color"
+  opts.stop = "Count"
+  names = df.colnames(opts)
+  answer = {"Color", "Count"}
   for a = 1 to names.length do
     if names[a] <> answer[a] then Throw("test: colnames failed")
   end
