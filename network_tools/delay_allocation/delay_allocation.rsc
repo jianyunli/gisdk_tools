@@ -351,15 +351,9 @@ Macro "da allocate secondary benefits"
   output_dir = shared_args.output_dir
   v_projid = shared_args.v_projid
 
-  // Add fields to the output highway layer
+  // Open output highway layer
   {nlyr, llyr} = GetDBLayers(hwy_o)
   llyr = AddLayerToWorkspace(llyr, hwy_o, llyr)
-  /*a_fields = {
-    {"tot_proj_length", "Real", 12, 2,,,,"Approximate length of project"},
-    {"proj_benefits", "Real", 12, 2,,,,"Approximate length of project"},
-    {"score", "Real", 12, 2,,,,"Approximate length of project"}
-  }
-  RunMacro ("Add Fields", llyr, a_fields, a_initial_values)*/
 
   // Determine total project lengths
   temp_df = data_b.copy()
