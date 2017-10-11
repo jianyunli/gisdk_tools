@@ -377,21 +377,12 @@ Macro "da allocate secondary benefits"
   opts.file = hwy_o
   {map, {nlyr, llyr}} = RunMacro ("Create Map", opts)
 
-  // Create a distance skim matrix from every node to every node
-  Opts = null
-  Opts.Input.[Link Set] = {hwy_o + "|" + llyr, llyr}
-  Opts.Global.[Network Label] = "network"
-  Opts.Global.[Network Options].[Turn Penalties] = "Yes"
-  Opts.Global.[Network Options].[Keep Duplicate Links] = "FALSE"
-  Opts.Global.[Network Options].[Ignore Link Direction] = "FALSE"
-  Opts.Global.[Network Options].[Time Units] = "Minutes"
-  Opts.Global.[Link Options].Length = {llyr + ".Length", llyr + ".Length", , , "False"}
-  Opts.Global.[Length Units] = "Miles"
-  Opts.Global.[Time Units] = "Minutes"
-  net_file = output_dir + "/network.net"
-  Opts.Output.[Network File] = net_file
-  ret = RunMacro("TCB Run Operation", "Build Highway Network", Opts, &Ret)
+  // Create a simple network
+  opts = null
+  opts.llyr = llyr
+  net_file = RunMacro("Create Simple Highway Net", opts)
 
+  // Create a distance skim matrix from every node to every node
   Opts = null
   Opts.Input.Network = net_file
   Opts.Input.[Origin Set] = {hwy_o + "|" + nlyr, nlyr}
