@@ -686,11 +686,42 @@ Class "df" (tbl)
       else if field_type = "string" then type = "Character"
       else type = "Real"
 
-      a_fields =  {{field, type, 8, 2,,,, ""}}
+      width = self.new_field_width(self.tbl.(field_r))
+      a_fields =  {{field, type, width, 2,,,, ""}}
       RunMacro("TCB Add View Fields", {view, a_fields})
     end
 
     SetDataVectors(view + "|" + set, self.tbl, )
+  EndItem
+
+  /*
+  Helper to update_view().
+  Looks at up to the first 100 values in a vector/array to determine
+  how large the field needs to be.
+
+  Inputs
+    data
+      Array or vector
+
+  Returns
+    The max width of the first 100 values
+  */
+
+  Macro "new_field_width" (data) do
+
+    if TypeOf(data) = "array" then data = A2V(data)
+    if TypeOf(data) <> "vector"
+      then Throw("new_field_width: 'data' must be array or vector")
+
+    if data.type <> "string" then data = String(data)
+
+    width = 0
+    iter = min(100, data.length)
+    for i = 1 to iter do
+      if StringLength(data[i]) > width then width = StringLength(data[i])
+    end
+
+    return(width)
   EndItem
 
   /*
