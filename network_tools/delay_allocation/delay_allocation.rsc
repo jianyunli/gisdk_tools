@@ -32,17 +32,30 @@ Macro "da initial calculations"
   // Extract arguments
   hwy_b = shared_args.hwy_b
   hwy_nb = shared_args.hwy_nb
-  param_file = shared_args.param_file
+  link_params = shared_args.link_params
   output_dir = shared_args.output_dir
 
   // Argument check
   if hwy_b = null then Throw("Delay Allocation: 'hwy_b' is missing")
   if hwy_nb = null then Throw("Delay Allocation: 'hwy_nb' is missing")
-  if param_file = null then Throw("Delay Allocation: 'param_file' is missing")
+  if link_params = null then Throw("Delay Allocation: 'param_file' is missing")
+  if TypeOf(link_params) <> "array"
+    then Throw("'link_params' must be a named array")
+  if link_params.ab_vol = null then Throw("Link parameter 'ab_vol' is missing")
+  if link_params.ba_vol = null then Throw("Link parameter 'ba_vol' is missing")
+  if link_params.ab_cap = null then Throw("Link parameter 'ab_cap' is missing")
+  if link_params.ba_cap = null then Throw("Link parameter 'ba_cap' is missing")
+  if link_params.ab_delay = null
+    then Throw("Link parameter 'ab_delay' is missing")
+  if link_params.ba_delay = null
+    then Throw("Link parameter 'ba_delay' is missing")
+  if link_params.fclass_field = null
+    then Throw("Link parameter 'fclass_field' is missing")
+  if link_params.cc_class = null
+    then Throw("Link parameter 'cc_class' is missing")
+  if link_params.projid_field = null
+    then Throw("Link parameter 'projid_field' is missing")
   if output_dir = null then Throw("Delay Allocation: 'output_dir' is missing")
-
-  // Read the parameter table
-  params = RunMacro("Read Parameter File", param_file)
 
   // Create the output directory
   if GetDirectoryInfo(output_dir, "All") = null then CreateDirectory(output_dir)
@@ -54,10 +67,11 @@ Macro "da initial calculations"
   {nlyr_b, llyr_b} = GetDBLayers(hwy_b)
   llyr_b = AddLayerToWorkspace(llyr_b, hwy_b, llyr_b)
   SetLayer(llyr_b)
-  params.cc_class = if TypeOf(params.cc_class) = "string"
-    then "'" + params.cc_class + "'"
-    else String(params.cc_class)
-  qry = "Select * where " + params.fclass_field + " <> " + params.cc_class
+  link_params.cc_class = if TypeOf(link_params.cc_class) = "string"
+    then "'" + link_params.cc_class + "'"
+    else String(link_params.cc_class)
+  qry = "Select * where " + link_params.fclass_field + " <> " +
+    link_params.cc_class
   SelectByQuery("to_export", "Several", qry)
   opts = null
   {, opts.[Field Spec]} = GetFields(llyr_b, "All")
@@ -75,10 +89,10 @@ Macro "da initial calculations"
   // (convert any nulls to zeros)
   data_b = CreateObject("df")
   a_fieldnames = {
-    "ID", "Length", "Dir", params.projid_field,
-    params.ab_vol, params.ba_vol,
-    params.ab_cap, params.ba_cap,
-    params.ab_delay, params.ba_delay
+    "ID", "Length", "Dir", link_params.projid_field,
+    link_params.ab_vol, link_params.ba_vol,
+    link_params.ab_cap, link_params.ba_cap,
+    link_params.ab_delay, link_params.ba_delay
   }
   opts = null
   opts.view = llyr_o
@@ -104,11 +118,13 @@ Macro "da initial calculations"
   DropLayerFromWorkspace(llyr_nb)
 
   // Calculate absolute and pct volume changes from no build to build
-  v_abdiff = data_b.get_vector(params.ab_vol) - data_nb.get_vector(params.ab_vol)
-  v_badiff = data_b.get_vector(params.ba_vol) - data_nb.get_vector(params.ba_vol)
+  v_abdiff = data_b.get_vector(link_params.ab_vol) -
+    data_nb.get_vector(link_params.ab_vol)
+  v_badiff = data_b.get_vector(link_params.ba_vol) -
+    data_nb.get_vector(link_params.ba_vol)
   v_totdiff = v_abdiff + v_badiff
-  v_abpctdiff = min(999, v_abdiff / (data_nb.get_vector(params.ab_vol) + .0001) * 100)
-  v_bapctdiff = min(999, v_badiff / (data_nb.get_vector(params.ba_vol) + .0001) * 100)
+  v_abpctdiff = min(999, v_abdiff / (data_nb.get_vector(link_params.ab_vol) + .0001) * 100)
+  v_bapctdiff = min(999, v_badiff / (data_nb.get_vector(link_params.ba_vol) + .0001) * 100)
   data_b.mutate("ab_vol_diff", v_abdiff)
   data_b.mutate("ba_vol_diff", v_badiff)
   data_b.mutate("tot_vol_diff", v_totdiff)
@@ -116,11 +132,13 @@ Macro "da initial calculations"
   data_b.mutate("ba_vol_pct_diff", v_bapctdiff)
 
   // Calculate absolute and pct capacity changes from no build to build
-  v_abdiff = data_b.get_vector(params.ab_cap) - data_nb.get_vector(params.ab_cap)
-  v_badiff = data_b.get_vector(params.ba_cap) - data_nb.get_vector(params.ba_cap)
+  v_abdiff = data_b.get_vector(link_params.ab_cap) -
+    data_nb.get_vector(link_params.ab_cap)
+  v_badiff = data_b.get_vector(link_params.ba_cap) -
+    data_nb.get_vector(link_params.ba_cap)
   v_totdiff = v_abdiff + v_badiff
-  v_abpctdiff = min(999, v_abdiff / (data_nb.get_vector(params.ab_cap) + .0001) * 100)
-  v_bapctdiff = min(999, v_badiff / (data_nb.get_vector(params.ba_cap) + .0001) * 100)
+  v_abpctdiff = min(999, v_abdiff / (data_nb.get_vector(link_params.ab_cap) + .0001) * 100)
+  v_bapctdiff = min(999, v_badiff / (data_nb.get_vector(link_params.ba_cap) + .0001) * 100)
   data_b.mutate("ab_cap_diff", v_abdiff)
   data_b.mutate("ba_cap_diff", v_badiff)
   data_b.mutate("tot_cap_diff", v_totdiff)
@@ -128,8 +146,10 @@ Macro "da initial calculations"
   data_b.mutate("ba_cap_pct_diff", v_bapctdiff)
 
   // Calculate delay change
-  v_abdelaydiff = data_b.get_vector(params.ab_delay) - data_nb.get_vector(params.ab_delay)
-  v_badelaydiff = data_b.get_vector(params.ba_delay) - data_nb.get_vector(params.ba_delay)
+  v_abdelaydiff = data_b.get_vector(link_params.ab_delay) -
+    data_nb.get_vector(link_params.ab_delay)
+  v_badelaydiff = data_b.get_vector(link_params.ba_delay) -
+    data_nb.get_vector(link_params.ba_delay)
   v_totdelaydiff = v_abdelaydiff + v_badelaydiff
   data_b.mutate("ab_delay_diff", v_abdelaydiff)
   data_b.mutate("ba_delay_diff", v_badelaydiff)
@@ -139,22 +159,22 @@ Macro "da initial calculations"
   Opts = null
   Opts.Unique = "True"
   Opts.Ascending = "False"
-  v_uniqueProjID = SortVector(data_b.get_vector(params.projid_field),Opts)
+  v_uniqueProjID = SortVector(data_b.get_vector(link_params.projid_field),Opts)
 
   // Determine which projects change capacity
   df = data_b.copy()
-  df.filter(params.projid_field + " <> null")
-  df.group_by(params.projid_field)
+  df.filter(link_params.projid_field + " <> null")
+  df.group_by(link_params.projid_field)
   agg = null
   agg.tot_cap_diff = {"sum"}
   df.summarize(agg)
   df.filter("sum_tot_cap_diff <> 0")
-  v_projid = df.get_vector(params.projid_field)
+  v_projid = df.get_vector(link_params.projid_field)
 
   // Store results in shared variable
   shared_args.data_b = data_b
   shared_args.data_nb = data_nb
-  shared_args.params = params
+  shared_args.link_params = link_params
   shared_args.v_projid = v_projid
 EndMacro
 
@@ -217,7 +237,7 @@ Macro "da classify benefits"
   // Extract arguments to shorten names
   data_b = shared_args.data_b
   data_nb = shared_args.data_nb
-  params = shared_args.params
+  link_params = shared_args.link_params
   output_dir = shared_args.output_dir
   hwy_o = shared_args.hwy_o
 
@@ -256,7 +276,7 @@ Macro "da classify benefits"
     // Overwrite the previous classification where two simple
     // rules are satisfied:
     // all delay changes on new facilities are primary
-    nb_cap = data_nb.get_vector(params.ab_cap) + data_nb.get_vector(params.ba_cap)
+    nb_cap = data_nb.get_vector(link_params.ab_cap) + data_nb.get_vector(link_params.ba_cap)
     v_category = if (nb_cap = 0) then "Primary" else v_category
     // if capacity doesn't change, all delay changes are secondary
     v_category = if tot_cap_diff = 0 then "Secondary" else v_category
@@ -345,7 +365,7 @@ Macro "da allocate secondary benefits"
   shared shared_args
 
   // Extract arguments to shorten names
-  params = shared_args.params
+  link_params = shared_args.link_params
   hwy_o = shared_args.hwy_o
   data_b = shared_args.data_b
   output_dir = shared_args.output_dir
@@ -357,8 +377,8 @@ Macro "da allocate secondary benefits"
 
   // Determine total project lengths
   temp_df = data_b.copy()
-  temp_df.filter(params.projid_field + " <> null")
-  temp_df.group_by(params.projid_field)
+  temp_df.filter(link_params.projid_field + " <> null")
+  temp_df.group_by(link_params.projid_field)
   v_proj_length = if temp_df.get_vector("Dir") <> 0
     then temp_df.get_vector("Length") / 2
     else temp_df.get_vector("Length")
@@ -396,6 +416,8 @@ Macro "da allocate secondary benefits"
   mtx_file = output_dir + "/distance.mtx"
   Opts.Output.[Output Matrix].[File Name] = mtx_file
   ret = RunMacro("TCB Run Procedure", "TCSPMAT", Opts, &Ret)
+
+  DeleteFile(net_file)
 
   // Open the matrix, create a currency, and convert
   // nulls (diagonal) to zeros.
@@ -450,7 +472,7 @@ Macro "da allocate secondary benefits"
 
     // Select the current project
     SetLayer(llyr)
-    qry = "Select * where " + params.projid_field + " = " +
+    qry = "Select * where " + link_params.projid_field + " = " +
       (if TypeOf(proj_id) = "string" then "'" + proj_id + "'"
       else String(proj_id))
     n = SelectByQuery(project_set, "Several", qry)
@@ -745,13 +767,13 @@ Macro "da allocate primary benefits"
   // Extract arguments to shorten names
   v_projid = shared_args.v_projid
   data_b = shared_args.data_b
-  params = shared_args.params
+  link_params = shared_args.link_params
   secondary_df = shared_args.secondary_df
   output_dir = shared_args.output_dir
 
   // Calculate the primary benefit table
   primary_df = data_b.copy()
-  primary_df.rename(params.projid_field, "proj_id")
+  primary_df.rename(link_params.projid_field, "proj_id")
   primary_df.filter("proj_id <> null")
   primary_df.mutate(
     "vmt_diff", primary_df.tbl.tot_vol_diff * primary_df.get_vector("Length")
@@ -927,8 +949,8 @@ the delay allocation method, and then checks the results against known answers.
 This way, it will be easy to determine if the algorithm is broken by a
 modification to the script.
 
-There is no way to automatically locate the location of this script on different
-computers without compiling to UI. Instead, modify the 'test_dir' variable
+There is no way to automatically locate the directory of this script on different
+computers without compiling to UI. Instead, modify the 'test_dir' variable below
 to point to the "unit_test" folder before testing. Try to avoid commiting that
 change to the repo.
 */
@@ -942,7 +964,8 @@ Macro "test da"
   opts = null
   opts.hwy_b = test_dir + "/build_network/build.dbd"
   opts.hwy_nb = test_dir + "/nobuild_network/nobuild.dbd"
-  opts.param_file = test_dir + "/parameters.csv"
+  param_file = test_dir + "/parameters.csv"
+  opts.link_params = RunMacro("Read Parameter File", param_file)
   opts.output_dir = test_dir + "/output"
   opts.debug = "true"
   RunMacro("Delay Allocation", opts)
