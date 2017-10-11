@@ -351,13 +351,13 @@ Inputs
     Named array holding all arguments. (e.g. MacroOpts.hwy_dbd)
 
     llyr
-      Optional String
+      String - provide either llyr or hwy_dbd (not both)
       Name of line layer to create network from. If provided, the macro assumes
       the layer is already in the workspace. Either 'llyr' or 'hwy_dbd' must
       be provided.
 
     hwy_dbd
-      Optional String
+      String - provide either llyr or hwy_dbd (not both)
       Full path to the highway DBD file to create a network. If provided, the
       macro assumes that it is not already open in the workspace.Either 'llyr'
       or 'hwy_dbd' must be provided.
@@ -365,11 +365,13 @@ Inputs
     centroid_qry
       Optional String
       Query defining centroid set. If null, a centroid set will not be created.
+      e.g. "FCLASS = 99"
 
 Returns
   net_file
     String
-    Full path to the network file
+    Full path to the network file created by the network. Will be in the
+    same directory as the hwy_dbd.
 */
 
 Macro "Create Simple Highway Net" (MacroOpts)
