@@ -1,8 +1,72 @@
 /*
 Delay Allocation Method
 
+This method compares a no-build highway network to one with multiple additional
+projets (the build network). The algorithm assigns benefits (hours of delay
+reduction) to each new project based on it's usage characteristics.
+
 Throughout this code, variables with suffix "_b" will refer to the build layer
-and "_nb" to no-build. "_o" will refer to the output.
+and "_nb" to no-build. "_o" will refer to the output layer.
+*/
+
+/*
+Primary macro that calls all other macros in sequence
+
+Inputs
+  Args
+    Named array containing all arguments for the macro:
+
+    hwy_nb
+      String
+      Full path to the no-build highway geodatabase. By definition, this layer
+      must have fewer highway projects than the build layer.
+
+    hwy_b
+      String
+      Full path to the build highway geodatabase.
+
+    output_dir
+      String
+      Full path to the directory where all output will be written
+
+    link_params
+      Named array containing field names and other info common to all link
+      layers as listed below:
+
+      ab_vol and ba_vol
+        Strings
+        Field anmes for the total daily volume by direction (AB/BA)
+
+      ab_cap and ba_cap
+        Strings
+        Field names for the total daily capacity by direction (AB/BA)
+
+      ab_delay and ba_delay
+        Strings
+        Field names for the total daily delay by direction (AB/BA)
+
+      fclass_field
+        String
+        Field name for functional class (must contain a centroid connector class)
+
+      cc_class
+        String or numeric
+        Value of fclass_field that represents centroid connectors
+
+      projid_field
+        String
+        Field name containing project IDs
+
+Outputs
+  Does not return anything.
+  Several output files are created:
+
+    project_benefits.csv
+      Primary output of the algorithm. Summarizes project performance.
+
+    delay_allocation.dbd
+      Output highway layer. Contains intermediate fields that can be used
+      to check calculations and reasonableness of results.
 */
 
 Macro "Delay Allocation" (Args)
