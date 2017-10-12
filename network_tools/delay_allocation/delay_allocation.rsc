@@ -25,6 +25,11 @@ Inputs
       String
       Full path to the build highway geodatabase.
 
+    project_costs
+      Optional string
+      Full path to a csv table containing "proj_id" and "cost" fields. If
+      provided, the output summary table will calculate B/C ratio.
+
     output_dir
       String
       Full path to the directory where all output will be written
@@ -81,6 +86,9 @@ Macro "Delay Allocation" (Args)
   RunMacro("da classify benefits")
   RunMacro("da allocate secondary benefits")
   RunMacro("da allocate primary benefits")
+  if Args.project_costs <> null
+    then RunMacro("da add cost info")
+  RunMacro("da mapping")
 
   RunMacro("Close All")
   DestroyProgressBar()
@@ -874,6 +882,64 @@ Macro "da allocate primary benefits"
 EndMacro
 
 /*
+
+*/
+
+Macro "da add cost info"
+  shared shared_args
+  UpdateProgressBar("Adding cost info", 0)
+
+  project_costs = shared_args.project_costs
+  output_dir = shared_args.output_dir
+
+  // Read in the two tables
+  summary_df = CreateObject("df")
+  summary_df.read_csv(output_dir + "/project_benefits.csv")
+  cost_df = CreateObject("df")
+  cost_df.read_csv(project_costs)
+
+  // Join the cost info and calculate benefit/cost ratio
+  summary_df.left_join(cost_df, "proj_id")
+  summary_df.mutate(
+    "bc_ratio", summary_df.tbl.total_benefits / summary_df.tbl.cost)
+  summary_df.write_csv(output_dir + "/project_benefits.csv")
+EndMacro
+
+/*
+Joins project summary information to the output geodatabase. Currently
+does nothing else, but mapping code can be added.
+*/
+
+Macro "da mapping"
+  shared shared_args
+  UpdateProgressBar("Mapping", 0)
+
+  output_dir = shared_args.output_dir
+  hwy_o = shared_args.hwy_o
+  projid_field = shared_args.link_params.projid_field
+
+  // Create a data frame of the output link layer
+  {nlyr, llyr} = GetDBLayers(hwy_o)
+  llyr = AddLayerToWorkspace(llyr, hwy_o, llyr)
+  hwy_df = CreateObject("df")
+  opts = null
+  opts.view = llyr
+  hwy_df.read_view(opts)
+
+  // Create a data frame of the project summary data
+  summary_df = CreateObject("df")
+  summary_df.read_csv(output_dir + "/project_benefits.csv")
+
+  // Join the data frames and update the link layer
+  hwy_df.left_join(summary_df, projid_field, "proj_id")
+  opts = null
+  opts.start = "primary_benefits"
+  columns = hwy_df.colnames(opts)
+  hwy_df.select(columns)
+  hwy_df.update_view(llyr)
+EndMacro
+
+/*
 This macro is not used by the delay allocation method. It is used to prepare a
 csv table that can be used to estimate a distance profile for projects.  A no
 build scenario is required. Each comparison sceanrio must be the same as the
@@ -1031,6 +1097,7 @@ Macro "test da"
   param_file = test_dir + "/parameters.csv"
   opts.link_params = RunMacro("Read Parameter File", param_file)
   opts.output_dir = test_dir + "/output"
+  opts.project_costs = test_dir + "/project_costs.csv"
   opts.debug = "true"
   RunMacro("Delay Allocation", opts)
 
@@ -1046,7 +1113,7 @@ Macro "test da"
     then ShowMessage("Results did not match answer key")
     else do
       // Delete the output folder after checking results
-      RunMacro("Delete Directory", opts.output_dir)
+      //RunMacro("Delete Directory", opts.output_dir)
       ShowMessage("Unit test successful")
     end
 EndMacro
