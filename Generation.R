@@ -64,15 +64,3 @@ Sys.sleep(10)
 
 # write out the full, disagg table
 write_csv(final$weight_tbl, paste0(output_dir, "/HHDisaggregation.csv"))
-
-# Create wrk x veh table for work trips
-work_tbl <- final$weight_tbl %>%
-  group_by(ID = geo_taz, wrk, veh) %>%
-  summarize(HH = sum(weight))
-write_csv(work_tbl, paste0(output_dir, "/wrk_by_veh.csv"))
-
-# Create siz x veh table for non-work trips
-nonwork_tbl <- final$weight_tbl %>%
-  group_by(ID = geo_taz, siz, veh) %>%
-  summarize(HH = sum(weight))
-write_csv(nonwork_tbl, paste0(output_dir, "/siz_by_veh.csv"))
