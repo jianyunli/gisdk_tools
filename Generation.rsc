@@ -171,9 +171,31 @@ Options array containing all arguments to the function
   MacroOpts.output_dir
     String
     Path to output folder where temporary files are placed
+
+  MacroOpts.disagg_file
+    String
+    Path to a disaggregated household table (usually the output
+    of the "HH Joint Distribution" macro). This table must be in
+    long form. Example:
+
+    geo_taz|siz|inc|weight
+    1      |  1|  H|     2
+    1      |  1|  L|     3
+    etc.
+
+    Column names must match to those specified in the work and non- work
+    paramter files (e.g. "siz" and "inc"). The macro will automatically match
+    them.
 */
 
 Macro "Cross-Classification Method" (MacroOpts)
+
+  se_bin = MacroOpts.se_bin
+  output_dir = MacroOpts.output_dir
+  disagg_file = MacroOpts.disagg_file
+
+  // Open the disagg tbl
+  disagg_tbl = OpenTable("disag", "CSV", {disagg_file, })
 
   a_type = {"work", "nonwork"}
   for t = 1 to a_type.length do
@@ -183,29 +205,12 @@ Macro "Cross-Classification Method" (MacroOpts)
     // The assumed format of the rate table is that the last 2 columns
     // will be "purpose" and "rate".  Every other field is assumed to be a
     // marginal field.
-    rateFile = MacroOpts.("param_" + type)
-    rateTbl = OpenTable("rates", "CSV", {rateFile})
-    a_fields = GetFields(rateTbl, "All")
+    rate_file = MacroOpts.("param_" + type)
+    rate_tbl = OpenTable("rates", "CSV", {rate_file})
+    a_fields = GetFields(rate_tbl, "All")
     a_fields = a_fields[1]
     pos = ArrayPosition(a_fields, {"purpose"}, )
     a_margnames = ExcludeArrayElements(a_fields, pos, 2)
-
-    // Open the disagg output.  The file named is assumed to be in the format
-    // of "marg1_by_marg2.csv" or "marg1_by_marg2_by_marg3.csv" if 3D.
-    // The order of the marginals listed in the name must match the column
-    // order in the rate table.
-    for m = 1 to a_margnames.length do
-      margname = a_margnames[m]
-
-      if m = 1 then fileName = margname else
-      fileName = fileName + "_by_" + margname
-    end
-    fileName = fileName + ".csv"
-
-    disagTbl = OpenTable(
-      "disag", "CSV",
-      {MacroOpts.output_dir + "/" + fileName}
-    )
 
     // Join the rate table to the disagg output
     a_master_specs = null
@@ -213,63 +218,25 @@ Macro "Cross-Classification Method" (MacroOpts)
     for m = 1 to a_margnames.length do
       margname = a_margnames[m]
 
-      a_master_specs = a_master_specs + {disagTbl + "." + margname}
-      a_slave_specs = a_slave_specs + {rateTbl + "." + margname}
+      a_master_specs = a_master_specs + {disagg_tbl + "." + margname}
+      a_slave_specs = a_slave_specs + {rate_tbl + "." + margname}
     end
     opts = null
     opts.O = "O" // specifies multiple slave fields per master field
     jv = JoinViewsMulti("jv", a_master_specs, a_slave_specs, opts)
-    SetView(jv)
+    out_tbl = output_dir + "/" + type + "_trips.bin"
+    ExportView(jv + "|", "FFB", out_tbl, , )
+    CloseView(jv)
+    CloseView(rate_tbl)
 
-    // Use the gplyr library to make the rest easier
     df = CreateObject("df")
-    opts = null
-    opts.view = jv
-    df.read_view(opts)
-    // Select only the fields of interest
-    df.select({"ID", "purpose", "rate", "HH"})
-    // Calculate trips
-    df.mutate("trips", df.tbl.HH * df.tbl.rate)
-    // Summarize the table by TAZ ID and purpose
-    df.group_by({"ID", "purpose"})
-    agg = null
-    agg.trips = {"sum"}
-    df.summarize(agg)
-    // Remove count field
-    df.remove("Count")
-    // Spread the table
-    df.spread("purpose", "sum_trips", 0)
-    // Write table to CSV and join to se table
-    outputFile = MacroOpts.output_dir + "/trips.csv"
-    df.write_csv(outputFile)
-    RunMacro("Perma Join",
-      MacroOpts.se_bin, "ID",
-      outputFile, "ID"
-    )
-
-    // Add descriptions to the fields added to the se table
-    rateTbl = OpenTable("rates", "CSV", {rateFile})
-    v_purp = GetDataVector(rateTbl + "|", "purpose", )
-    opts = null
-    opts.Unique = "True"
-    v_purp = SortVector(v_purp, opts)
-    a_info = GetFileInfo(rateFile)
-    rateTblShort = a_info[1]
-    field = null
-    description = null
-    for p = 1 to v_purp.length do
-      field = field + {v_purp[p]}
-      description = description + {
-        "Generation|" +
-        "Productions|" +
-        "See " + rateTblShort + " for more info"
-      }
-    end
-    RunMacro("Add Field Description", MacroOpts.se_bin, field, description)
-
-    RunMacro("Close All")
-    DeleteFile(outputFile)
+    df.read_bin(out_tbl)
+    df.mutate("trips", df.tbl.weight * df.tbl.rate)
+    df.select("trips")
+    df.update_bin(out_tbl)
   end
+
+  RunMacro("Close All")
 EndMacro
 
 /*
