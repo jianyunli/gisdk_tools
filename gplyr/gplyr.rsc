@@ -688,7 +688,7 @@ Class "df" (tbl)
 
       width = self.new_field_width(self.tbl.(field_r))
       a_fields =  {{field, type, width, 2,,,, ""}}
-      RunMacro("TCB Add View Fields", {view, a_fields})
+      RunMacro("Add Fields", view, a_fields, )
     end
 
     SetDataVectors(view + "|" + set, self.tbl, )
