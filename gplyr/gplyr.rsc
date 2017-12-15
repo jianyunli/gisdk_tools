@@ -285,7 +285,8 @@ Class "df" (tbl)
     // Make sure that tbl property is an array
     if TypeOf(self.tbl) <> "array" then Throw("'tbl' property is not an array")
 
-    // Convert all columns to vectors and check length
+    // Convert all columns to vectors, check length, and remove periods from
+    // names.
     for i = 1 to self.tbl.length do
       colname = self.check_name(self.tbl[i][1])
 
@@ -300,6 +301,10 @@ Class "df" (tbl)
       // Length check
       if self.tbl.(colname).length <> self.nrow() then
         Throw("check: '" + colname + "' has different length than first column")
+
+      // Remove periods, which TC interprets as viewname.fieldname
+      newname = Substitute(colname, ".", "_", )
+      self.tbl[i][1] = newname
     end
   EndItem
 
