@@ -156,10 +156,6 @@ Creates trip productions by purpose for residents.
 MacroOpts
 Options array containing all arguments to the function
 
-  MacroOpts.se_bin
-    String
-    Path to se bin file
-
   MacroOpts.param_work
     String
     Path to CSV containing the work rates
@@ -167,10 +163,6 @@ Options array containing all arguments to the function
   MacroOpts.param_nonwork
     String
     Path to CSV containing the non-work rates
-
-  MacroOpts.output_dir
-    String
-    Path to output folder where temporary files are placed
 
   MacroOpts.disagg_file
     String
@@ -186,13 +178,28 @@ Options array containing all arguments to the function
     Column names must match to those specified in the work and non- work
     paramter files (e.g. "siz" and "inc"). The macro will automatically match
     them.
+
+  MacroOpts.return_dfs
+    True/False
+    If true, the work and nonwork tables are returned as dataframes. If false,
+    the default, the tables are written to bin files in the same directory
+    as the disagg_file.
+
+  Returns
+    Depends on return_dfs option
 */
 
 Macro "Cross-Classification Method" (MacroOpts)
 
-  se_bin = MacroOpts.se_bin
-  output_dir = MacroOpts.output_dir
   disagg_file = MacroOpts.disagg_file
+  return_dfs = MacroOpts.return_dfs
+
+  // Argument check
+  if disagg_file = null then Throw("'disagg_file' not provided")
+
+  // Set output directory to location of disagg file
+  {drive, directory, filename, ext} = SplitPath(disagg_file)
+  output_dir = RunMacro("Normalize Path", drive + directory)
 
   // Open the disagg tbl
   disagg_tbl = OpenTable("disag", "CSV", {disagg_file, })
@@ -224,19 +231,25 @@ Macro "Cross-Classification Method" (MacroOpts)
     opts = null
     opts.O = "O" // specifies multiple slave fields per master field
     jv = JoinViewsMulti("jv", a_master_specs, a_slave_specs, opts)
-    out_tbl = output_dir + "/" + type + "_trips.bin"
-    ExportView(jv + "|", "FFB", out_tbl, , )
-    CloseView(jv)
-    CloseView(rate_tbl)
 
     df = CreateObject("df")
-    df.read_bin(out_tbl)
+    opts = null
+    opts.view = jv
+    df.read_view(opts)
     df.mutate("trips", df.tbl.weight * df.tbl.rate)
-    df.select("trips")
-    df.update_bin(out_tbl)
+
+    if return_dfs
+      then result = result + {df}
+      else do
+        df.write_bin(output_dir + "/" + type + "_trips.bin")
+      end
+
+    CloseView(jv)
+    CloseView(rate_tbl)
   end
 
-  RunMacro("Close All")
+  CloseView(disagg_tbl)
+  if return_dfs then return(result)
 EndMacro
 
 /*
