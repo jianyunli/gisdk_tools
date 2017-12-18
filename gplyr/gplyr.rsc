@@ -187,7 +187,7 @@ Class "df" (tbl)
 
       if start and !stop then do
         if new_names = null
-          then a_colnames = a_colnames + {col_name}
+          then a_colnames = a_colnames + {self.uncheck_name(col_name)}
           else self.tbl[c][1] = new_names[c]
       end
 
