@@ -942,18 +942,14 @@ Class "df" (tbl)
 
   /*
   Like dply or SQL "select", returns a table with only
-  the columns listed in "fields".
+  the columns listed in "fields". To remove columns, see remove().
 
   fields:
     String or array/vector of strings
     fields to keep in the data frame
-
-  deselect:
-    True/False
-    If true, the fields listed will be removed from the table
   */
 
-  Macro "select" (fields, deselect) do
+  Macro "select" (fields) do
 
     // Argument checking and type handling
     if TypeOf(fields) = "vector" then fields = V2A(fields)
@@ -967,13 +963,10 @@ Class "df" (tbl)
       // Check to see if name is in table
       if !(self.in(field, self.colnames()))
         then Throw("select: field '" + field + "' not in data frame")
-
-      if deselect
-        then self.tbl.(field) = null
-        else data.(field) = self.get_vector(field)
+      data.(field) = self.get_vector(field)
     end
 
-    if !deselect then self.tbl = data
+    self.tbl = data
   EndItem
 
   /*
@@ -1931,15 +1924,6 @@ Macro "test gplyr"
   colnames = df.colnames()
   if colnames.length <> answer_length or colnames[1] <> answer_name
     then Throw("test: select failed")
-  // test deselect option
-  df = CreateObject("df")
-  df.read_csv(csv_file)
-  df.select("Length", "true")
-  answer = {"Size", "Color", "Count"}
-  colnames = df.colnames()
-  for a = 1 to answer.length do
-    if colnames[a] <> answer[a] then Throw("test: select failed")
-  end
 
   // test in
   df = CreateObject("df")
