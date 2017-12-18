@@ -524,8 +524,8 @@ EndMacro
 
 /*
 Replacement macro for TransCADs "JoinTableToLayer()", which does not work
-properly.  We have notified Caliper, who will correct it's functionality in a
-future release of TransCAD.  For now, use this.
+properly.  We have notified Caliper (in 2017), who will correct it's
+functionality in a future release of TransCAD.  For now, use this.
 
 Inputs:
 masterFile
