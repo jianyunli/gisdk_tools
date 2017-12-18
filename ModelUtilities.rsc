@@ -926,8 +926,9 @@ MacroOpts
   Contains all required arguments
 
   MacroOpts.tbl
-    String
-    Path to table file where the cross walk will take place.
+    String or gplyr data frame
+    Either a path to the .bin table file where the cross walk will take place,
+    or a gplyr data frame.
 
   MacroOpts.equiv_tbl
     The CSV file used to convert.  Must have a "from_field", "to_field", "to_desc",
@@ -974,6 +975,12 @@ Macro "Field Crosswalk" (MacroOpts)
   equiv_tbl = MacroOpts.equiv_tbl
   field_prefix = MacroOpts.field_prefix
   field_suffix = MacroOpts.field_suffix
+
+  // Check for data frame
+  if TypeOf(tbl) <> "string" then do
+    RunMacro("field_xwalk_df", MacroOpts)
+    return()
+  end
 
   // Open tables
   equiv_tbl = OpenTable("param", "CSV", {equiv_tbl})
@@ -1033,6 +1040,65 @@ Macro "Field Crosswalk" (MacroOpts)
 
   CloseView(equiv_tbl)
   CloseView(tbl)
+EndMacro
+
+/*
+Field crosswalk variant for data frames
+*/
+
+Macro "field_xwalk_df" (MacroOpts)
+
+  // Argument extraction
+  tbl = MacroOpts.tbl
+  equiv_tbl = MacroOpts.equiv_tbl
+  field_prefix = MacroOpts.field_prefix
+  field_suffix = MacroOpts.field_suffix
+
+  // Check for data frame
+  if TypeOf(tbl) <> "object"
+    then Throw("'tbl' must be a gplyr data frame")
+
+  equiv_tbl = OpenTable("param", "CSV", {equiv_tbl})
+
+  // Only work with equiv_tbl rows that aren't null
+  SetView(equiv_tbl)
+  qry = "Select * where from_field <> null"
+  n = SelectByQuery("not_null", "several", qry)
+  if n = 0 then Throw("Field Crosswalk: equiv_tbl is empty")
+
+  // Get from-field, to-field, factor, and description vectors
+  v_to_field = GetDataVector(equiv_tbl + "|not_null", "to_field", )
+  v_to_desc = GetDataVector(equiv_tbl + "|not_null", "to_desc", )
+  v_from_field = GetDataVector(equiv_tbl + "|not_null", "from_field", )
+  v_from_fac = GetDataVector(equiv_tbl + "|not_null", "from_factor", )
+
+  // Zero out any existing "to" fields to prevent build up
+  opts = null
+  opts.Unique = "True"
+  v_uniq_to = SortVector(v_to_field)
+  /* a_fnames = tbl.colnames() */
+  for t = 1 to v_uniq_to.length do
+    to_field = field_prefix + v_uniq_to[t] + field_suffix
+
+    if tbl.in(to_field, tbl.colnames()) then tbl.tbl.(to_field) = 0
+  end
+
+  // Loop over each "from" field listed in the parameter table
+  // and add their values (multiplied by their factors) to the "to" fields
+  for f = 1 to v_from_field.length do
+    from_field = v_from_field[f]
+    to_field = v_to_field[f]
+    desc = v_to_desc[f]
+    factor = v_from_fac[f]
+
+    // Add prefix/suffix
+    from_field = field_prefix + from_field + field_suffix
+    to_field = field_prefix + to_field + field_suffix
+
+    tbl.tbl.(to_field) = tbl.tbl.(from_field) * factor
+  end
+
+  CloseView(equiv_tbl)
 EndMacro
 
 /*
