@@ -317,7 +317,7 @@ Class "df" (tbl)
 
       // Remove periods, which TC interprets as viewname.fieldname
       newname = Substitute(colname, ".", "_", )
-      self.tbl[i][1] = newname
+      self.tbl[i][1] = self.uncheck_name(newname)
     end
   EndItem
 
