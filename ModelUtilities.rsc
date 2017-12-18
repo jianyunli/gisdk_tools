@@ -983,11 +983,11 @@ Macro "Field Crosswalk" (MacroOpts)
   end
   if TypeOf(tbl) = "string" then do
     {drive, directory, name, ext} = SplitPath(tbl)
-    if ext = "csv" then do
+    if ext = ".csv" then do
       RunMacro("field_xwalk_df", MacroOpts)
       return()
     end
-    if ext <> "bin" then Throw("'tbl' must be bin, csv, or data frame")
+    if ext <> ".bin" then Throw("'tbl' must be bin, csv, or data frame")
   end
 
 
@@ -1067,7 +1067,7 @@ Macro "field_xwalk_df_csv" (MacroOpts)
   // Argument checking
   if TypeOf(tbl) = "string" then do
     {drive, directory, name, ext} = SplitPath(tbl)
-    if ext = "csv" then do
+    if ext = ".csv" then do
       tmp = tbl
       tbl = CreateObject("df")
       tbl.read_csv(tmp)
