@@ -1845,6 +1845,16 @@ Macro "test gplyr"
     if names[a] <> answer[a] then Throw("test: colnames failed")
   end
 
+  // test get_vector
+  df = null
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  v = df.get_vector("length")
+  answer = {1, 1, 1, 1, 1, 1}
+  for a = 1 to answer.length do
+    if v[a] <> answer[a] then Throw("test: get_vector failed")
+  end
+
   // test coltypes
   df = CreateObject("df")
   df.read_csv(csv_file)
@@ -1921,6 +1931,15 @@ Macro "test gplyr"
   colnames = df.colnames()
   if colnames.length <> answer_length or colnames[1] <> answer_name
     then Throw("test: select failed")
+  // test deselect option
+  df = CreateObject("df")
+  df.read_csv(csv_file)
+  df.select("Length", "true")
+  answer = {"Size", "Color", "Count"}
+  colnames = df.colnames()
+  for a = 1 to answer.length do
+    if colnames[a] <> answer[a] then Throw("test: select failed")
+  end
 
   // test in
   df = CreateObject("df")
