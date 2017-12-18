@@ -198,7 +198,7 @@ Class "df" (tbl)
   EndItem
 
   /*
-  Returns an array of column types. Types possible types returned are
+  Returns an array of column types. Possible types returned are
   short
   long
   double
