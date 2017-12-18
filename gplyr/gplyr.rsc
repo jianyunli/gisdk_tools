@@ -223,6 +223,19 @@ Class "df" (tbl)
   EndItem
 
   /*
+  Returns a column of a data frame as a vector. Normally, some like this can
+  be used:
+
+  df.tbl.colname
+
+  However, for reserved words like length, this won't work:
+
+  df.tbl.length
+
+  get_vector() uses check_name() to avoid this problem. It is used within
+  other gplyr methods to protect against this. It is only used in project code
+  as needed.
+
   Inputs
     field_name
       String or array/vector of strings
