@@ -927,8 +927,8 @@ MacroOpts
 
   MacroOpts.tbl
     String or gplyr data frame
-    Either a path to the .bin table file where the cross walk will take place,
-    or a gplyr data frame.
+    Either a path to a table file (bin or csv) where the cross walk will take
+    place or a gplyr data frame.
 
   MacroOpts.equiv_tbl
     The CSV file used to convert.  Must have a "from_field", "to_field", "to_desc",
@@ -976,11 +976,20 @@ Macro "Field Crosswalk" (MacroOpts)
   field_prefix = MacroOpts.field_prefix
   field_suffix = MacroOpts.field_suffix
 
-  // Check for data frame
-  if TypeOf(tbl) <> "string" then do
+  // Argument checking
+  if TypeOf(tbl) = "object" then do
     RunMacro("field_xwalk_df", MacroOpts)
     return()
   end
+  if TypeOf(tbl) = "string" then do
+    {drive, directory, name, ext} = SplitPath(tbl)
+    if ext = "csv" then do
+      RunMacro("field_xwalk_df", MacroOpts)
+      return()
+    end
+    if ext <> "bin" then Throw("'tbl' must be bin, csv, or data frame")
+  end
+
 
   // Open tables
   equiv_tbl = OpenTable("param", "CSV", {equiv_tbl})
@@ -1043,10 +1052,11 @@ Macro "Field Crosswalk" (MacroOpts)
 EndMacro
 
 /*
-Field crosswalk variant for data frames
+Helper macro for "Field Crosswalk" - not meant to be called directly.
+Field crosswalk variant for data frames and csvs.
 */
 
-Macro "field_xwalk_df" (MacroOpts)
+Macro "field_xwalk_df_csv" (MacroOpts)
 
   // Argument extraction
   tbl = MacroOpts.tbl
@@ -1054,7 +1064,15 @@ Macro "field_xwalk_df" (MacroOpts)
   field_prefix = MacroOpts.field_prefix
   field_suffix = MacroOpts.field_suffix
 
-  // Check for data frame
+  // Argument checking
+  if TypeOf(tbl) = "string" then do
+    {drive, directory, name, ext} = SplitPath(tbl)
+    if ext = "csv" then do
+      tmp = tbl
+      tbl = CreateObject("df")
+      tbl.read_csv(tmp)
+    end else Throw("'tbl' must be a CSV file or data frame")
+  end
   if TypeOf(tbl) <> "object"
     then Throw("'tbl' must be a gplyr data frame")
 
