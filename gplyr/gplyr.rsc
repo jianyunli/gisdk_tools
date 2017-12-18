@@ -947,9 +947,13 @@ Class "df" (tbl)
   fields:
     String or array/vector of strings
     fields to keep in the data frame
+
+  deselect:
+    True/False
+    If true, the fields listed will be removed from the table
   */
 
-  Macro "select" (fields) do
+  Macro "select" (fields, deselect) do
 
     // Argument checking and type handling
     if TypeOf(fields) = "vector" then fields = V2A(fields)
@@ -963,9 +967,13 @@ Class "df" (tbl)
       // Check to see if name is in table
       if !(self.in(field, self.colnames()))
         then Throw("select: field '" + field + "' not in data frame")
-      data.(field) = self.get_vector(field)
+
+      if deselect
+        then self.tbl.(field) = null
+        else data.(field) = self.get_vector(field)
     end
-    self.tbl = data
+
+    if !deselect then self.tbl = data
   EndItem
 
   /*
