@@ -1825,11 +1825,11 @@ Macro "test gplyr"
   for a = 1 to opts.new_names.length do
     if answer[a] <> opts.new_names[a] then Throw("test: colnames failed")
   end
-  // test 2 (checks to make sure reserved name Length is handled)
+  // test 2 (checks to make sure reserved name length is handled)
   df = CreateObject("df")
   df.read_csv(csv_file)
   names = df.colnames()
-  answer = {"Size", "Color", "Count", "Length"}
+  answer = {"Size", "Color", "Count", "length"}
   for a = 1 to names.length do
     if names[a] <> answer[a] then Throw("test: colnames failed")
   end
