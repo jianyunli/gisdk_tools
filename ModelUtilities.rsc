@@ -1207,6 +1207,56 @@ Macro "Matrix Crosswalk" (MacroOpts)
 EndMacro
 
 /*
+Enhanced version of TCs AddMatrixCore(). If the core already exists,
+it is removed and then recreated instead of causing an error.
+
+Inputs
+  string or matrix handle
+    Either a string pointing the matrix file to modify or it's handle.
+
+  cores
+    String or array of strings
+    Name of core(s) to add.
+
+  initial_values
+    Optional array of numbers
+    Values to fill the new fields with
+*/
+
+Macro "Add Cores" (mtx, cores, initial_values)
+
+  // Argument check
+  if mtx = null then Throw("'mtx' not provided")
+  if cores = null then Throw("'cores' not provided")
+  if TypeOf(mtx) = "string" then mtx = OpenMatrix(mtx, )
+  if TypeOf(cores) = "string" then cores = {cores}
+  if initial_values <> null then do
+    if TypeOf(initial_values) <> "array" then initial_values = {initial_values}
+    if initial_values.length <> cores.length
+      then Throw("If provided, 'initial_values' must be same length as 'cores'")
+  end
+
+  // Get matrix cores
+  a_current_cores = GetMatrixCoreNames(mtx)
+
+  // Loop over each core to add
+  for c = 1 to cores.length do
+    core = cores[c]
+
+    // check if the new core already exists and delete it
+    pos = ArrayPosition(a_current_cores, {core}, )
+    if pos <> 0 then DropMatrixCore(mtx, core)
+    AddMatrixCore(mtx, core)
+
+    // Set initial value if provided
+    if initial_values <> null then do
+      cur = CreateMatrixCurrency(mtx, core, , , )
+      cur := initial_values[c]
+    end
+  end
+EndMacro
+
+/*
 This macro takes two vectors and calculates the RMSE
 
 v_target and v_compare
