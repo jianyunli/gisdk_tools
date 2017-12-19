@@ -746,15 +746,15 @@ a_fields
   e.g. {"Density", "Real", 10, 3,,,,"Used to calculate initial AT"}
   (See ModifyTable() TC help page for full array info)
 
-a_initial_values
-  Array (optional)
+initial_values
+  Number, string, or array of numbers/strings (optional)
   If not provided, any fields to add that already exist in the table will not be
   modified in any way. If provided, the added field will be set to this value.
   This can be used to ensure that a field is set to null, zero, etc. even if it
   already exists.
 */
 
-Macro "Add Fields" (view, a_fields, a_initial_values)
+Macro "Add Fields" (view, a_fields, initial_values)
 
   // Argument check
   if view = null then Throw("'view' not provided")
@@ -762,9 +762,10 @@ Macro "Add Fields" (view, a_fields, a_initial_values)
   for field in a_fields do
     if field = null then Throw("An element in the 'a_fields' array is missing")
   end
-  if a_initial_values <> null then do
-    if TypeOf(a_initial_values) <> "array"
-      then Throw("'a_initial_values' must be an array")
+  if initial_values <> null then do
+    if TypeOf(initial_values) <> "array" then initial_values = {initial_values}
+    if TypeOf(initial_values) <> "array"
+      then Throw("'initial_values' must be an array")
   end
 
   // Get current structure and preserve current fields by adding
@@ -799,12 +800,12 @@ Macro "Add Fields" (view, a_fields, a_initial_values)
   ModifyTable(view, a_str)
 
   // Set initial field values if provided
-  if a_initial_values <> null then do
+  if initial_values <> null then do
     nrow = GetRecordCount(view, )
-    for f = 1 to a_initial_values.length do
+    for f = 1 to initial_values.length do
       field = a_fields[f][1]
       type = a_fields[f][2]
-      init_value = a_initial_values[f]
+      init_value = initial_values[f]
 
       if type = "Character" then type = "String"
 
