@@ -26,18 +26,18 @@ param_file = dir + "/mc_parameters.csv"
     purp = mc_params[p][1]
     prefix = period + "_" + purp
 
-    params = mc_params.(purp).(period)
+    purp_params = mc_params.(purp)
+    num_markets = purp_params.length
 
     // Create a copy of the template mdl file and update its
     // attributes.
     mdl = output_dir + "/" + prefix + ".mdl"
     CopyFile(template_mdl, mdl)
 
-    // Create model object.  The segment is always "*"
+    // Create model object.
     model = null
     model = CreateObject("NLM.Model")
     model.Read(mdl, 1)
-    seg = model.GetSegment("*")
 
     // Update matrix sources and indices. This also begins building
     // the 'nle_opts' options array for the NestedLogitEngine macro.
@@ -62,24 +62,43 @@ param_file = dir + "/mc_parameters.csv"
       }
     end
 
-    // Change coefficients
-    for fld = 1 to model.GetFieldCount() do
-      field = model.GetField(fld)
-      term = seg.GetTerm(field.Name)
-      /* term.Coeff = nz(params.(field.Name)) */
-    end
+    // Update coefficients and ASCs for each market segment
+    for m = 1 to num_markets do
+      market = purp_params[m][1]
 
-    // Change alternative specific constant
-    for a = 1 to seg.GetAlternativeCount() do
-      alt = seg.GetAlternative(a)
-      term = alt.ASC
-      /* term.Coeff = params.(alt.Name) */
+      params = purp_params.(market)
+
+      // If there is only 1 market segment, it must be named "*" in the
+      // template.mdl file.
+      if num_markets = 1
+        then seg = model.GetSegment("*")
+        else seg = model.GetSegment(market)
+
+      // Change coefficients
+      coeffs = params.coeffs
+      for fld = 1 to model.GetFieldCount() do
+        field = model.GetField(fld)
+        term = seg.GetTerm(field.Name)
+        term.Coeff = nz(coeffs.(field.Name))
+      end
+
+      // Change alternative specific constant
+      ascs = params.asc
+      for a = 1 to seg.GetAlternativeCount() do
+        alt = seg.GetAlternative(a)
+        asc = nz(ascs.(alt.Name))
+        if asc <> 0 then do
+          seg.CreateAscTerm(alt)
+          term = alt.ASC
+          term.Coeff = ascs.(alt.Name)
+        end
+      end
     end
 
     // write out the new mdl file for manual review
     model.Write(mdl)
     model.Clear()
-Throw()
+  Throw()
     // Finish setup of NestedLogitEngine's options array
     nle_opts.Global.Model = mdl
     nle_opts.Global.[Missing Method] = "Drop Mode"
