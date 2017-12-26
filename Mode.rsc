@@ -51,7 +51,7 @@ Inputs
       purpose, and market segment.
 
       For Example:
-        Period | Purpose | Market | Section | Term     | Value | Description
+        Period | Purpose | Segment| Section | Term     | Value | Description
         PK     | HBW     | inc1   | coeffs  | init_wait| -.2   | initial wait time
         PK     | HBW     | inc1   | asc     | wEB      | -1.2  | ASC for walk-to-express-bus
         etc
@@ -251,4 +251,67 @@ Macro "GT - Combine MC Matrices" (MacroOpts)
   param_file = MacroOpts.param_file
 
 
+EndMacro
+
+/*
+Extracts each data source from an MDL file for each field/term and each
+alternative. For example, a variable in the utility equation might be
+"drive_time" and an alternative named "DAToll" might use the matrix core
+"hwy_skim.SOV_toll_time" to get the right value. In that case, the output
+CSV would have a row like so:
+
+segment  | alternative  | coefficient | source_name
+--------------------------------------------------------------
+inc1     | DAToll       | drive_time  | hwy_skim.SOV_toll_time
+
+For complex models, the MDL file can be difficult to check for errors. This
+puts it in a format more conducive to error checking.
+
+It also serves to document some obscure methods of the NLM.Model.
+*/
+
+Macro "GT - Template MDL to CSV" (mdl_file)
+
+  // Create model object.
+  model = null
+  model = CreateObject("NLM.Model")
+  model.Read(mdl_file, 1)
+
+  model_methods = GetClassMethodNames("NLM.Model")
+  segment_methods = GetClassMethodNames("NLM.Segment")
+  alternative_methods = GetClassMethodNames("NLM.Alternative")
+  access_methods = GetClassMethodNames("NLM.Alternative")
+  itemlist_methods = GetClassMethodNames("NLM.ItemList")
+  fielddataaccess_methods = GetClassMethodNames("NLM.FieldDataAccess")
+
+  // For each segment
+  for s = 1 to model.GetSegmentCount() do
+    seg = model.GetSegment(s)
+
+    // For each alternative
+    for a = 1 to seg.GetAlternativeCount() do
+      alt = seg.GetAlternative(a)
+      if alt.IsLeaf = "True" then do
+        access = alt.Access
+        // For each item in the data access list
+        for d = 1 to access.Count() do
+          fda = access.Get(d)
+
+          coeff_name = fda.Name
+          core_or_field_name = fda.Access.Source.Name + "." + fda.Access.Name
+
+          csv.segment = csv.segment + {seg.Name}
+          csv.alternative = csv.alternative + {alt.Name}
+          csv.variable = csv.variable + {coeff_name}
+          csv.source_name = csv.source_name + {core_or_field_name}
+        end
+      end
+    end
+  end
+
+  // Create a data frame and write to CSV
+  df = CreateObject("df", csv)
+  {drive, directory, name, ext} = SplitPath(mdl_file)
+  csv_file = drive + directory + name + ".csv"
+  df.write_csv(csv_file)
 EndMacro
