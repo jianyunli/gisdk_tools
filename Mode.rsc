@@ -1,4 +1,11 @@
 /*
+Script Notes:
+This script file contains macros that apply the Nested Logit Engine in TransCAD
+as well as some utility scripts that support manipulation of .mdl files.
+*/
+
+/*
+Main macro.
 Runs the various macros that make up GTs general mode choice model.
 */
 
@@ -254,8 +261,10 @@ Macro "GT - Combine MC Matrices" (MacroOpts)
 EndMacro
 
 /*
-Extracts each data source from an MDL file for each field/term and each
-alternative. For example, a variable in the utility equation might be
+Extracts the data sources for each alternative on the "Utilies" tab of the Logit
+Model Application GUI (for all segments).
+
+For example, a variable in the utility equation might be
 "drive_time" and an alternative named "DAToll" might use the matrix core
 "hwy_skim.SOV_toll_time" to get the right value. In that case, the output
 CSV would have a row like so:
@@ -276,12 +285,6 @@ Macro "GT - Get Utility Variables" (mdl_file)
   model = null
   model = CreateObject("NLM.Model")
   model.Read(mdl_file, 1)
-
-  model_methods = GetClassMethodNames("NLM.Model")
-  segment_methods = GetClassMethodNames("NLM.Segment")
-  alternative_methods = GetClassMethodNames("NLM.Alternative")
-  itemlist_methods = GetClassMethodNames("NLM.ItemList")
-  fielddataaccess_methods = GetClassMethodNames("NLM.FieldDataAccess")
 
   // For each segment
   for s = 1 to model.GetSegmentCount() do
@@ -317,10 +320,9 @@ Macro "GT - Get Utility Variables" (mdl_file)
 EndMacro
 
 /*
-The reverse of Template MDL to CSV. It does not setup or name data sources.
-That is easily done manually. What often takes time (and is error prone) is
-selecting the matrix cores and field names for each alternative. This uses
-a CSV file and does it automatically.
+Sets the data sources for each alternative on the "Utilies" tab of the Logit
+Model Application GUI (for all segments). For example, it might tell the drive-
+alone alternative which skim core to use for drive time.
 
 Inputs
   csv_file
@@ -334,6 +336,9 @@ Inputs
 */
 
 Macro "GT - Set Utility Variables" (csv_file, mdl_file)
+
+  // Clear out any current utility variables
+  RunMacro("GT - Clear Utility Variables", mdl_file)
 
   // Create a df object just to access some of its methods
   df = CreateObject("df")
@@ -352,9 +357,6 @@ Macro "GT - Set Utility Variables" (csv_file, mdl_file)
     existing_fields = existing_fields + {model.Fields.Items[f][1]}
   end
 
-  model_methods = GetClassMethodNames("NLM.Model")
-  segment_methods = GetClassMethodNames("NLM.Segment")
-  alternative_methods = GetClassMethodNames("NLM.Alternative")
   // For each segment
   for s = 1 to params.length do
     segment = params[s][1]
@@ -396,6 +398,43 @@ Macro "GT - Set Utility Variables" (csv_file, mdl_file)
         fld = model.GetField(variable)
         da = model.CreateDataAccess("data", label, field_or_core)
         alt.SetAccess(fld, da, )
+      end
+    end
+  end
+
+  // write out the new mdl file for manual review
+  model.Write(mdl_file)
+  model.Clear()
+EndMacro
+
+/*
+Clears out any values on the "Utilities" tab of the Logit Model Application GUI.
+Clears values for all segments.
+*/
+
+Macro "GT - Clear Utility Variables" (mdl_file)
+
+  // Create model object.
+  model = null
+  model = CreateObject("NLM.Model")
+  model.Read(mdl_file, 1)
+
+  // For each segment
+  for s = 1 to model.GetSegmentCount() do
+    seg = model.GetSegment(s)
+
+    // For each alternative
+    for a = 1 to seg.GetAlternativeCount() do
+      alt = seg.GetAlternative(a)
+
+      if alt.Access.Items <> null then do
+
+        access = alt.Access
+        // For each item in the data access list
+        for name in access.GetNames() do
+          fld = model.GetField(name)
+          alt.SetAccess(fld, "", )
+        end
       end
     end
   end
