@@ -12,12 +12,11 @@ Runs the various macros that make up GTs general mode choice model.
 Macro "GT - Mode Choice" (MacroOpts)
 
   RunMacro("GT - Mode Choice NLM", MacroOpts)
-  /* RunMacro("GT - Combine MC Matrices", MacroOpts) */
+  RunMacro("GT - Combine MC Matrices", MacroOpts)
+  RunMacro("Close All")
 EndMacro
 
 /*
-
-
 Inputs
   MacroOpts
     tables
@@ -77,12 +76,6 @@ Macro "GT - Mode Choice NLM" (MacroOpts)
   template_mdl = MacroOpts.template_mdl
   param_file = MacroOpts.param_file
   output_dir = MacroOpts.output_dir
-
-// FOR TESTING ONLY
-// Point to the version-controlled template and parameters
-dir = "Y:\\projects/NORPC/repo/Scenarios/_base_scenario_dont_modify_taz_change/Reference/mc_dct_files"
-template_mdl = dir + "/norpc_mc.mdl"
-param_file = dir + "/mc_parameters.csv"
 
   // Read in the parameter file
   mc_params = RunMacro("Read Parameter File", param_file)
@@ -257,7 +250,57 @@ Macro "GT - Combine MC Matrices" (MacroOpts)
   output_dir = MacroOpts.output_dir
   param_file = MacroOpts.param_file
 
+  // Use the parameter file to get the unique values of period, purpose, and
+  // segment.
+  df = CreateObject("df")
+  df.read_csv(param_file)
+  v_periods = df.unique(df.tbl.Period)
+  v_purposes = df.unique(df.tbl.Purpose)
+  v_segments = df.unique(df.tbl.Segment)
+  a_types = {"probabilities", "logsums", "utilities"}
 
+  // Loop over each period, purpose, segment, and matrix
+  for period in v_periods do
+    to_mtx_file = output_dir + "/_" + period + "_mc_share_results.mtx"
+    if GetFileInfo(to_mtx_file) <> null then DeleteFile(to_mtx_file)
+
+    for type in a_types do
+      for purpose in v_purposes do
+        for segment in v_segments do
+          from_mtx_file = output_dir + "/" + type + "_" + period + "_" +
+            purpose + "_" + segment + ".mtx"
+
+          a_to_delete = a_to_delete + {from_mtx_file}
+          from_mtx = OpenMatrix(from_mtx_file, )
+          a_core_names = GetMatrixCoreNames(from_mtx)
+          v_core_names = type + " " + purpose + " " + segment + " " + A2V(a_core_names)
+          a_final_core_names = a_final_core_names + V2A(v_core_names)
+          a_temp = CreateMatrixCurrencies(from_mtx, , , )
+          for a = 1 to a_temp.length do
+            a_from_curs = a_from_curs + {a_temp[a][2]}
+          end
+        end
+      end
+    end
+
+    // Combine all matrix currencies into a single matrix
+    opts = null
+    opts.[File Name] = to_mtx_file
+    opts.Label = period + " mc share results"
+    CombineMatrices(a_from_curs, opts)
+    a_from_curs = null
+
+    // Rename cores
+    to_mtx = OpenMatrix(to_mtx_file, )
+    SetMatrixCoreNames(to_mtx, a_final_core_names)
+    a_final_core_names = null
+  end
+
+  // Delete all the individual matrices
+  from_mtx = null
+  for file in a_to_delete do
+    DeleteFile(file)
+  end
 EndMacro
 
 /*
@@ -293,18 +336,18 @@ Macro "GT - Get Utility Variables" (mdl_file)
     // For each alternative
     for a = 1 to seg.GetAlternativeCount() do
       alt = seg.GetAlternative(a)
-      if alt.IsLeaf = "True" then do
+      if alt.Access.Items <> null then do
         access = alt.Access
         // For each item in the data access list
         for d = 1 to access.Count() do
           fda = access.Get(d)
 
-          coeff_name = fda.Name
+          variable_name = fda.Name
           core_or_field_name = fda.Access.Source.Name + "." + fda.Access.Name
 
           csv.segment = csv.segment + {seg.Name}
           csv.alternative = csv.alternative + {alt.Name}
-          csv.variable = csv.variable + {coeff_name}
+          csv.variable = csv.variable + {variable_name}
           csv.value = csv.value + {core_or_field_name}
           csv.description = csv.description + {""}
         end
@@ -394,7 +437,7 @@ Macro "GT - Set Utility Variables" (csv_file, mdl_file)
           term = seg.CreateTerm(variable, 0, ) // term name and coefficient
           existing_terms = existing_terms + {variable}
         end
-        //
+
         fld = model.GetField(variable)
         da = model.CreateDataAccess("data", label, field_or_core)
         alt.SetAccess(fld, da, )
