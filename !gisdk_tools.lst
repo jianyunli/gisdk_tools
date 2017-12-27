@@ -1,13 +1,16 @@
 AreaType.rsc
 Assignment_Highway.rsc
 Distribution.rsc
+Mode.rsc
 Generation.rsc
 ModelUtilities.rsc
 Summaries.rsc
+docstrings.rsc
 network_tools/HighwayProjectManagement.rsc
 network_tools/TransitProjectManagement.rsc
 network_tools/load_counts.rsc
 network_tools/HCMCapacity.rsc
 network_tools/network_utilities.rsc
 network_tools/delay_allocation/delay_allocation.rsc
+network_tools/delay_allocation/delay_allocation_gui.rsc
 gplyr/gplyr.rsc
