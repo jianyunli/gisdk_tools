@@ -270,7 +270,7 @@ puts it in a format more conducive to error checking.
 It also serves to document some obscure methods of the NLM.Model.
 */
 
-Macro "GT - Template MDL to CSV" (mdl_file)
+Macro "GT - Get Utility Variables" (mdl_file)
 
   // Create model object.
   model = null
@@ -280,7 +280,6 @@ Macro "GT - Template MDL to CSV" (mdl_file)
   model_methods = GetClassMethodNames("NLM.Model")
   segment_methods = GetClassMethodNames("NLM.Segment")
   alternative_methods = GetClassMethodNames("NLM.Alternative")
-  access_methods = GetClassMethodNames("NLM.Alternative")
   itemlist_methods = GetClassMethodNames("NLM.ItemList")
   fielddataaccess_methods = GetClassMethodNames("NLM.FieldDataAccess")
 
@@ -303,7 +302,8 @@ Macro "GT - Template MDL to CSV" (mdl_file)
           csv.segment = csv.segment + {seg.Name}
           csv.alternative = csv.alternative + {alt.Name}
           csv.variable = csv.variable + {coeff_name}
-          csv.source_name = csv.source_name + {core_or_field_name}
+          csv.value = csv.value + {core_or_field_name}
+          csv.description = csv.description + {""}
         end
       end
     end
@@ -314,4 +314,93 @@ Macro "GT - Template MDL to CSV" (mdl_file)
   {drive, directory, name, ext} = SplitPath(mdl_file)
   csv_file = drive + directory + name + ".csv"
   df.write_csv(csv_file)
+EndMacro
+
+/*
+The reverse of Template MDL to CSV. It does not setup or name data sources.
+That is easily done manually. What often takes time (and is error prone) is
+selecting the matrix cores and field names for each alternative. This uses
+a CSV file and does it automatically.
+
+Inputs
+  csv_file
+    String
+    Path to CSV file with the same format produced by "GT - Get Utility
+    Variables."
+
+  mdl_file
+    String
+    Path to .mdl file that will have its variables set.
+*/
+
+Macro "GT - Set Utility Variables" (csv_file, mdl_file)
+
+  // Create a df object just to access some of its methods
+  df = CreateObject("df")
+
+  // Read the csv parameter file
+  params = RunMacro("Read Parameter File", csv_file)
+
+  // Create model object.
+  model = null
+  model = CreateObject("NLM.Model")
+  model.Read(mdl_file, 1)
+
+  // Collect an array of existing variables in the model. They are called
+  // "fields" in the NLM.Model.
+  for f = 1 to model.Fields.Items.length do
+    existing_fields = existing_fields + {model.Fields.Items[f][1]}
+  end
+
+  model_methods = GetClassMethodNames("NLM.Model")
+  segment_methods = GetClassMethodNames("NLM.Segment")
+  alternative_methods = GetClassMethodNames("NLM.Alternative")
+  // For each segment
+  for s = 1 to params.length do
+    segment = params[s][1]
+
+    seg_params = params.(segment)
+    seg = model.GetSegment(segment)
+
+    // Collect an array of existing terms. Each segment can have different terms.
+    existing_terms = null
+    for t = 1 to seg.Terms.Items.length do
+      existing_terms = existing_terms + {seg.Terms.Items[t][1]}
+    end
+
+    // For each alternative
+    for a = 1 to seg_params.length do
+      alternative = seg_params[a][1]
+
+      alt_params = seg_params.(alternative)
+      alt = seg.GetAlternative(alternative)
+
+      // For each variable
+      for v = 1 to alt_params.length do
+        variable = alt_params[v][1]
+
+        source = alt_params.(variable)
+        {label, field_or_core} = ParseString(source, ".")
+
+        // Create a model field if it doesn't already exist
+        if !df.in(variable, existing_fields) then do
+          fld = model.CreateField(variable, )
+          existing_fields = existing_fields + {variable}
+        end
+        // Create a segment term if it doesn't already exist
+        if !df.in(variable, existing_terms) then do
+          term = seg.CreateTerm(variable, 0, ) // term name and coefficient
+          existing_terms = existing_terms + {variable}
+        end
+        //
+        fld = model.GetField(variable)
+        da = model.CreateDataAccess("data", label, field_or_core)
+        alt.SetAccess(fld, da, )
+      end
+    end
+  end
+
+  // write out the new mdl file for manual review
+  model.Write(mdl_file)
+  model.Clear()
 EndMacro
