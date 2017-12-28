@@ -171,13 +171,20 @@ Macro "Destination Choice" (MacroOpts)
   for p = 1 to num_purposes do
     purp = dc_params[p][1]
 
-    params = dc_params.(purp)
+    purp_params = dc_params.(purp)
+    num_segments = purp_params.length
+
+  for s = 1 to num_segments do
+    segment = purp_params[s][1]
+    params = purp_params.(segment).(params)
+    coeffs = purp_params.(segment).(coeffs)
+    prefix = period + "_" + purp + "_" + segment
+
     max_iters = if (params.max_iters = null) then 1 else params.max_iters
-    params.max_iters = null
     // if iterating shadow price, set a min number of iterations
     if max_iters > 1 then min_iters = min(10, max_iters)
-    prod_field = "d_" + purp + "_" + period
-    attr_field = "d_" + purp + "a_" + period
+    prod_field = "d_" + period + "_" + purp + "_" + segment
+    attr_field = "d_" + period + "_" + purp + "a_" + segment
 
     // Fill dc_size column with appropriate attraction info
     // Fill shadow price with 0s
@@ -189,15 +196,19 @@ Macro "Destination Choice" (MacroOpts)
     SetDataVector(se_tbl + "|", "shadow_price", v_sp, )
     CloseView(se_tbl)
 
-    // Calculate a capped distance cores required by DC
+    // Calculate distance cores required by DC
     RunMacro("Calc DC Matrix Cores", params.dist_cap, skim_file, period)
 
     // Create a copy of the template dcm file and update its
     // attributes.
-    dcm = output_dir + "/" + purp + "_" + period + ".dcm"
+    // The DC Model Application GUI does not support market segments like MC.
+    // For now, make a separate mdl copy for each segment in addition to
+    // period and purpose. Emailed Caliper to see if segments can be created
+    // through NLM.Model methods that will be respected during application.
+    dcm = output_dir + "/" + prefix + ".dcm"
     CopyFile(template_dcm, dcm)
 
-    // Create model object.  The segment is always "*"
+    // Create model object.  The segment for DC is always "*".
     model = null
     model = CreateObject("NLM.Model")
     model.Read(dcm, 1)
@@ -212,7 +223,7 @@ Macro "Destination Choice" (MacroOpts)
     for fld = 1 to model.GetFieldCount() do
       field = model.GetField(fld)
       term = seg.GetTerm(field.Name)
-      term.Coeff = nz(params.(field.Name))
+      term.Coeff = nz(coeffs.(field.Name))
     end
 
     // write out the new dcm file for manual review
@@ -236,23 +247,23 @@ Macro "Destination Choice" (MacroOpts)
       Opts.Input.[skim_mtx Matrix] = skim_file
       Opts.Input.[zone_tbl Set] = {se_bin, "ScenarioSE", se_set_name, se_set_query}
       // Probability matrix
-      file_name = "probabilities_" + purp + "_" + period + ".MTX"
+      file_name = "probabilities_" + prefix + ".MTX"
       file_path = output_dir + "/" + file_name
-      Opts.Output.[Probability Matrix].Label = purp + " " + period + " Probability"
+      Opts.Output.[Probability Matrix].Label = prefix + " Probability"
       Opts.Output.[Probability Matrix].Compression = 1
       Opts.Output.[Probability Matrix].FileName = file_name
       Opts.Output.[Probability Matrix].[File Name] = file_path
       // Trips matrix
-      trip_file = "trips_" + purp + "_" + period + ".MTX"
+      trip_file = "trips_" + prefix + ".MTX"
       trip_path = output_dir + "/" + trip_file
-      Opts.Output.[Applied Totals Matrix].Label = purp + " " + period + " Trips"
+      Opts.Output.[Applied Totals Matrix].Label = prefix + " Trips"
       Opts.Output.[Applied Totals Matrix].Compression = 1
       Opts.Output.[Applied Totals Matrix].FileName = trip_file
       Opts.Output.[Applied Totals Matrix].[File Name] = trip_path
       // Utility matrix
-      file_name = "utilities_" + purp + "_" + period + ".MTX"
+      file_name = "utilities_" + prefix + ".MTX"
       file_path = output_dir + "/" + file_name
-      Opts.Output.[Utility Matrix].Label = purp + " " + period + " Utility"
+      Opts.Output.[Utility Matrix].Label = prefix + " Utility"
       Opts.Output.[Utility Matrix].Compression = 1
       Opts.Output.[Utility Matrix].FileName = file_name
       Opts.Output.[Utility Matrix].[File Name] = file_path
@@ -269,7 +280,6 @@ Macro "Destination Choice" (MacroOpts)
             "('" + proper_set_name + "')"
           )
         end else Throw("Destination choice model failed")
-
       end
 
       // Export column marginals to table
@@ -323,7 +333,6 @@ Macro "Destination Choice" (MacroOpts)
         opts.Tables = {a_skim_mcs[1][1]}
         CopyMatrixStructure({a_skim_mcs[1][2]}, opts)
 
-
         // Transfer data
         trip_mtx = OpenMatrix(trip_path, )
         a_trip_mcs = CreateMatrixCurrencies(trip_mtx, , , )
@@ -350,6 +359,7 @@ Macro "Destination Choice" (MacroOpts)
         RenameFile(temp_file, trip_file)
       end
     end
+  end
   end
 
   // Clean up workspace
