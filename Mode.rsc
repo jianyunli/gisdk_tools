@@ -19,6 +19,10 @@ EndMacro
 /*
 Inputs
   MacroOpts
+    period
+      String
+      Time of day - e.g. "AM" or "PK". Must match a period in the param_file.
+
     tables
       Named array
       Defines the file and (optional) selection set to use for each table data
@@ -71,6 +75,7 @@ Inputs
 Macro "GT - Mode Choice NLM" (MacroOpts)
 
   // Argument extraction
+  period = MacroOpts.period
   tables = MacroOpts.tables
   matrices = MacroOpts.matrices
   template_mdl = MacroOpts.template_mdl
@@ -79,170 +84,165 @@ Macro "GT - Mode Choice NLM" (MacroOpts)
 
   // Read in the parameter file
   mc_params = RunMacro("Read Parameter File", param_file)
-  num_periods = mc_params.length
+  period_params = mc_params.(period)
+  num_purposes = period_params.length
 
-  for t = 1 to num_periods do
-    period = mc_params[t][1]
-    period_params = mc_params.(period)
+  for p = 1 to num_purposes do
+    purp = period_params[p][1]
+    prefix = period + "_" + purp
 
-    num_purposes = period_params.length
+    purp_params = period_params.(purp)
+    num_markets = purp_params.length
 
-    for p = 1 to num_purposes do
-      purp = period_params[p][1]
-      prefix = period + "_" + purp
+    // Create a copy of the template mdl file and update its
+    // attributes.
+    mdl = output_dir + "/" + prefix + ".mdl"
+    CopyFile(template_mdl, mdl)
 
-      purp_params = period_params.(purp)
-      num_markets = purp_params.length
+    // Create model object.
+    model = null
+    model = CreateObject("NLM.Model")
+    model.Read(mdl, 1)
 
-      // Create a copy of the template mdl file and update its
-      // attributes.
-      mdl = output_dir + "/" + prefix + ".mdl"
-      CopyFile(template_mdl, mdl)
-
-      // Create model object.
-      model = null
-      model = CreateObject("NLM.Model")
-      model.Read(mdl, 1)
-
-      // Update matrix sources and indices. This also begins building
-      // the 'nle_opts' options array for the NestedLogitEngine macro.
-      nle_opts = null
-      for matrix in matrices.(period) do
-        source_name = matrix[1]
-        opts = matrix[2]
-        source = model.Sources.Get(source_name) // The name of the source, as it appears in the MDL/DCM file
-        /* source.FileLabel = prefix + " " + source_name // not sure if this has to matc */
-        if opts.index <> null then do
-          source.RowIdx = opts.index
-          source.ColIdx = opts.index
-        end
-        nle_opts.Input.(source_name + " Matrix") = opts.file
+    // Update matrix sources and indices. This also begins building
+    // the 'nle_opts' options array for the NestedLogitEngine macro.
+    nle_opts = null
+    for matrix in matrices do
+      source_name = matrix[1]
+      opts = matrix[2]
+      // The name of the source, as it appears in the MDL/DCM file
+      source = model.Sources.Get(source_name)
+      if opts.index <> null then do
+        source.RowIdx = opts.index
+        source.ColIdx = opts.index
       end
-
-      // Setup the table inputs for NLE
-      for table in tables do
-        source_name = table[1]
-        opts = table[2]
-        opts.query = RunMacro("Normalize Query", opts.query)
-        {drive, directory, name, ext} = SplitPath(opts.file)
-        nle_opts.Input.(source_name + " Set") = {
-          opts.file, name, opts.set_name, opts.query
-        }
-      end
-
-      // Update coefficients and ASCs for each market segment
-      for m = 1 to num_markets do
-        market = purp_params[m][1]
-
-        nle_opts.Global.Segments = nle_opts.Global.Segments + {market}
-
-        params = purp_params.(market)
-
-        // If there is only 1 market segment, it must be named "*" in the
-        // template.mdl file.
-        if num_markets = 1
-          then seg = model.GetSegment("*")
-          else seg = model.GetSegment(market)
-
-        // Change coefficients
-        coeffs = params.coeffs
-        for fld = 1 to model.GetFieldCount() do
-          field = model.GetField(fld)
-          term = seg.GetTerm(field.Name)
-          term.Coeff = nz(coeffs.(field.Name))
-        end
-
-        // Change alternative specific constant
-        ascs = params.asc
-        for a = 1 to seg.GetAlternativeCount() do
-          alt = seg.GetAlternative(a)
-          asc = nz(ascs.(alt.Name))
-          if asc <> 0 then do
-            seg.CreateAscTerm(alt)
-            term = alt.ASC
-            term.Coeff = ascs.(alt.Name)
-          end
-        end
-      end
-
-      // write out the new mdl file for manual review
-      model.Write(mdl)
-      model.Clear()
-
-      // Finish setup of NestedLogitEngine's options array
-      nle_opts.Global.Model = mdl
-      nle_opts.Global.[Missing Method] = "Drop Mode"
-      nle_opts.Global.[Base Method] = "On Matrix"
-      /* nle_opts.Global.[Base Method] = "On View" */
-      nle_opts.Global.[Small Volume To Skip] = 0.001
-      nle_opts.Global.[Utility Scaling] = "By Parent Theta"
-      nle_opts.Global.ShadowIterations = 10
-      nle_opts.Global.ShadowTolerance = 0.001
-      nle_opts.Flag.ShadowPricing = 0
-      nle_opts.Flag.[To Output Utility] = 1
-      nle_opts.Flag.[To Output Logsum] = 1
-      nle_opts.Flag.Aggregate = 1
-      // An output matrix is created for each market
-      prob_mtxs = null
-      util_mtxs = null
-      logsum_mtxs = null
-      for m = 1 to num_markets do
-        market = purp_params[m][1]
-
-        file_name = "probabilities_" + prefix + "_" + market + ".MTX"
-        file_path = output_dir + "/" + file_name
-        opts = null
-        opts.Label = prefix + "_" + market + " Probability"
-        opts.Compression = 1
-        opts.FileName = file_name
-        opts.[File Name] = file_path
-        opts.Type = "Automatic"
-        opts.[File based] = "Automatic"
-        opts.Sparse = "Automatic"
-        opts.[Column Major] = "Automatic"
-        prob_mtxs = prob_mtxs + {opts}
-
-        file_name = "utilities_" + prefix + "_" + market + ".MTX"
-        file_path = output_dir + "/" + file_name
-        opts = null
-        opts.Label = prefix + "_" + market + " Utility"
-        opts.Compression = 1
-        opts.FileName = file_name
-        opts.[File Name] = file_path
-        opts.Type = "Automatic"
-        opts.[File based] = "Automatic"
-        opts.Sparse = "Automatic"
-        opts.[Column Major] = "Automatic"
-        util_mtxs = util_mtxs + {opts}
-
-        file_name = "logsums_" + prefix + "_" + market + ".MTX"
-        file_path = output_dir + "/" + file_name
-        opts = null
-        opts.Label = prefix + "_" + market + " Logsum"
-        opts.Compression = 1
-        opts.FileName = file_name
-        opts.[File Name] = file_path
-        opts.Type = "Automatic"
-        opts.[File based] = "Automatic"
-        opts.Sparse = "Automatic"
-        opts.[Column Major] = "Automatic"
-        logsum_mtxs = logsum_mtxs + {opts}
-      end
-
-      nle_opts.Output.[Probability Matrices] = prob_mtxs
-      nle_opts.Output.[Utility Matrices] = util_mtxs
-      nle_opts.Output.[Logsum Matrices] = logsum_mtxs
-
-      // Run model
-      ret_value = RunMacro("TCB Run Procedure", "NestedLogitEngine", nle_opts, &Ret)
+      nle_opts.Input.(source_name + " Matrix") = opts.file
     end
+
+    // Setup the table inputs for NLE
+    for table in tables do
+      source_name = table[1]
+      opts = table[2]
+      opts.query = RunMacro("Normalize Query", opts.query)
+      {drive, directory, name, ext} = SplitPath(opts.file)
+      nle_opts.Input.(source_name + " Set") = {
+        opts.file, name, opts.set_name, opts.query
+      }
+    end
+
+    // Update coefficients and ASCs for each market segment
+    for m = 1 to num_markets do
+      market = purp_params[m][1]
+
+      nle_opts.Global.Segments = nle_opts.Global.Segments + {market}
+
+      params = purp_params.(market)
+
+      // If there is only 1 market segment, it must be named "*" in the
+      // template.mdl file.
+      if num_markets = 1
+        then seg = model.GetSegment("*")
+        else seg = model.GetSegment(market)
+
+      // Change coefficients
+      coeffs = params.coeffs
+      for fld = 1 to model.GetFieldCount() do
+        field = model.GetField(fld)
+        term = seg.GetTerm(field.Name)
+        term.Coeff = nz(coeffs.(field.Name))
+      end
+
+      // Change alternative specific constant
+      ascs = params.asc
+      for a = 1 to seg.GetAlternativeCount() do
+        alt = seg.GetAlternative(a)
+        asc = nz(ascs.(alt.Name))
+        if asc <> 0 then do
+          seg.CreateAscTerm(alt)
+          term = alt.ASC
+          term.Coeff = ascs.(alt.Name)
+        end
+      end
+    end
+
+    // write out the new mdl file for manual review
+    model.Write(mdl)
+    model.Clear()
+
+    // Finish setup of NestedLogitEngine's options array
+    nle_opts.Global.Model = mdl
+    nle_opts.Global.[Missing Method] = "Drop Mode"
+    nle_opts.Global.[Base Method] = "On Matrix"
+    /* nle_opts.Global.[Base Method] = "On View" */
+    nle_opts.Global.[Small Volume To Skip] = 0.001
+    nle_opts.Global.[Utility Scaling] = "By Parent Theta"
+    nle_opts.Global.ShadowIterations = 10
+    nle_opts.Global.ShadowTolerance = 0.001
+    nle_opts.Flag.ShadowPricing = 0
+    nle_opts.Flag.[To Output Utility] = 1
+    nle_opts.Flag.[To Output Logsum] = 1
+    nle_opts.Flag.Aggregate = 1
+    // An output matrix is created for each market
+    prob_mtxs = null
+    util_mtxs = null
+    logsum_mtxs = null
+    for m = 1 to num_markets do
+      market = purp_params[m][1]
+
+      file_name = "probabilities_" + prefix + "_" + market + ".MTX"
+      file_path = output_dir + "/" + file_name
+      opts = null
+      opts.Label = prefix + "_" + market + " Probability"
+      opts.Compression = 1
+      opts.FileName = file_name
+      opts.[File Name] = file_path
+      opts.Type = "Automatic"
+      opts.[File based] = "Automatic"
+      opts.Sparse = "Automatic"
+      opts.[Column Major] = "Automatic"
+      prob_mtxs = prob_mtxs + {opts}
+
+      file_name = "utilities_" + prefix + "_" + market + ".MTX"
+      file_path = output_dir + "/" + file_name
+      opts = null
+      opts.Label = prefix + "_" + market + " Utility"
+      opts.Compression = 1
+      opts.FileName = file_name
+      opts.[File Name] = file_path
+      opts.Type = "Automatic"
+      opts.[File based] = "Automatic"
+      opts.Sparse = "Automatic"
+      opts.[Column Major] = "Automatic"
+      util_mtxs = util_mtxs + {opts}
+
+      file_name = "logsums_" + prefix + "_" + market + ".MTX"
+      file_path = output_dir + "/" + file_name
+      opts = null
+      opts.Label = prefix + "_" + market + " Logsum"
+      opts.Compression = 1
+      opts.FileName = file_name
+      opts.[File Name] = file_path
+      opts.Type = "Automatic"
+      opts.[File based] = "Automatic"
+      opts.Sparse = "Automatic"
+      opts.[Column Major] = "Automatic"
+      logsum_mtxs = logsum_mtxs + {opts}
+    end
+
+    nle_opts.Output.[Probability Matrices] = prob_mtxs
+    nle_opts.Output.[Utility Matrices] = util_mtxs
+    nle_opts.Output.[Logsum Matrices] = logsum_mtxs
+
+    // Run model
+    ret_value = RunMacro("TCB Run Procedure", "NestedLogitEngine", nle_opts, &Ret)
   end
 
   RunMacro("Close All")
 EndMacro
 
 /*
-
+The NLM model will create three matrices for each combination of period,
+purpose, and segment. This macro combines all of that into period matrices.
 */
 
 Macro "GT - Combine MC Matrices" (MacroOpts)
