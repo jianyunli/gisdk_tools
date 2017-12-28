@@ -317,47 +317,11 @@ Macro "Destination Choice" (MacroOpts)
         if dc_iter < min_iters then pct_rmse = 100
         dc_iter = dc_iter + 1
 
-        // To simplify project code using this macro, never let the final trip matrix
-        // have fewer rows/columns than all centroids. Thus, if a selection set was
+        // To simplify project code using this macro, make sure that the final
+        // matrix dimensions include all centroids. Thus, if a selection set was
         // applied, expand the matrix. The new rows/columns will be null.
-        if se_set_name <> null then do
-
-          // Copy the skim matrix structure to a temp file
-          skim_mtx = OpenMatrix(skim_file, )
-          a_skim_mcs = CreateMatrixCurrencies(skim_mtx, , , )
-          temp_file = output_dir + "/temp.mtx"
-          opts = null
-          opts.[File Name] = temp_file
-          opts.Label = purp + " " + period + " Trips"
-          opts.Type = "Float"
-          opts.Tables = {a_skim_mcs[1][1]}
-          CopyMatrixStructure({a_skim_mcs[1][2]}, opts)
-
-          // Transfer data
-          trip_mtx = OpenMatrix(trip_path, )
-          a_trip_mcs = CreateMatrixCurrencies(trip_mtx, , , )
-          temp_mtx = OpenMatrix(temp_file, )
-          a_temp_mcs = CreateMatrixCurrencies(temp_mtx, , , )
-          a_temp_mcs[1][2] := 0
-          MergeMatrixElements(a_temp_mcs[1][2], {a_trip_mcs[1][2]}, , , )
-          SetMatrixCoreName(temp_mtx, a_skim_mcs[1][1], "Total")
-
-          // Change the row/col index to match
-          {ri, ci} = GetMatrixIndex(trip_mtx)
-          {temp_ri, temp_ci} = GetMatrixIndex(temp_mtx)
-          SetMatrixIndexName(temp_mtx, temp_ri, ri)
-          SetMatrixIndexName(temp_mtx, temp_ci, ci)
-
-          // Clean up workspace and replace dc output matrix with temp
-          skim_mtx = null
-          a_skim_mcs = null
-          a_trip_mcs = null
-          trip_mtx = null
-          temp_mtx = null
-          a_temp_mcs = null
-          DeleteFile(trip_path)
-          RenameFile(temp_file, trip_file)
-        end
+        if se_set_name <> null
+          then RunMacro("Expand Matrix to All Nodes", trip_path, skim_file)
       end
     end
   end
@@ -529,4 +493,51 @@ Macro "Aggregate Distribution Matrices" (MacroOpts)
   end
 
   RunMacro("Close All")
+EndMacro
+
+/*
+Often, the NLM.Model is only applied to a subset of centroids (generally
+internal zones) while the skim matrix includes both internal and external zones.
+It makes everything easier to have the output matrices of DC and MC be the
+right dimension.
+*/
+
+Macro "Expand Matrix to All Nodes" (mtx_file, skim_file)
+
+  // Copy the skim matrix structure to a temp file
+  skim_mtx = OpenMatrix(skim_file, )
+  a_skim_mcs = CreateMatrixCurrencies(skim_mtx, , , )
+  temp_mtx_file = output_dir + "/temp.mtx"
+  opts = null
+  opts.[File Name] = temp_mtx_file
+  opts.Label = purp + " " + period + " Trips"
+  opts.Type = "Float"
+  opts.Tables = {a_skim_mcs[1][1]}
+  CopyMatrixStructure({a_skim_mcs[1][2]}, opts)
+
+  // Transfer data
+  mtx = OpenMatrix(mtx_file, )
+  a_mtx_mcs = CreateMatrixCurrencies(mtx, , , )
+  temp_mtx = OpenMatrix(temp_mtx_file, )
+  a_temp_mcs = CreateMatrixCurrencies(temp_mtx, , , )
+  a_temp_mcs[1][2] := 0
+  MergeMatrixElements(a_temp_mcs[1][2], {a_mtx_mcs[1][2]}, , , )
+  SetMatrixCoreName(temp_mtx, a_skim_mcs[1][1], "Total")
+
+  // Change the row/col index to match
+  {ri, ci} = GetMatrixIndex(mtx)
+  {temp_ri, temp_ci} = GetMatrixIndex(temp_mtx)
+  SetMatrixIndexName(temp_mtx, temp_ri, ri)
+  SetMatrixIndexName(temp_mtx, temp_ci, ci)
+
+  // Clean up workspace and replace mtx_file with temp
+  skim_mtx = null
+  a_skim_mcs = null
+  a_mtx_mcs = null
+  mtx = null
+  temp_mtx = null
+  a_temp_mcs = null
+  DeleteFile(mtx_file)
+  {drive, directory, name, ext} = SplitPath(mtx_file)
+  RenameFile(temp_mtx_file, name + ext)
 EndMacro
