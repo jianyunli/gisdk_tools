@@ -234,6 +234,15 @@ Macro "GT - Mode Choice NLM" (MacroOpts)
 
     // Run model
     ret_value = RunMacro("TCB Run Procedure", "NestedLogitEngine", nle_opts, &Ret)
+
+    // Make sure output matrices match skim matrix dimensions
+    if tables.zone_tbl.set_name <> null then do
+      skim_file = matrices[1][2].file
+      for i = 1 to nle_opts.Output.[Probability Matrices].length do
+        trip_path = nle_opts.Output.[Probability Matrices][i].file_path
+        RunMacro("Expand Matrix to All Nodes", trip_path, skim_file)
+      end
+    end
   end
 
   RunMacro("Close All")
