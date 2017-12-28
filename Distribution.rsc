@@ -156,6 +156,7 @@ Macro "Destination Choice" (MacroOpts)
 
   // Read in the dc parameter file
   dc_params = RunMacro("Read Parameter File", param_file)
+  dc_params = dc_params.(period)
   num_purposes = dc_params.length
 
   // Open the se_bin file and add a dc_size and shadow price column
@@ -170,7 +171,7 @@ Macro "Destination Choice" (MacroOpts)
   for p = 1 to num_purposes do
     purp = dc_params[p][1]
 
-    params = dc_params.(purp).(period)
+    params = dc_params.(purp)
     max_iters = if (params.max_iters = null) then 1 else params.max_iters
     params.max_iters = null
     // if iterating shadow price, set a min number of iterations
