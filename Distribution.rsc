@@ -174,192 +174,192 @@ Macro "Destination Choice" (MacroOpts)
     purp_params = dc_params.(purp)
     num_segments = purp_params.length
 
-  for s = 1 to num_segments do
-    segment = purp_params[s][1]
-    params = purp_params.(segment).(params)
-    coeffs = purp_params.(segment).(coeffs)
-    prefix = period + "_" + purp + "_" + segment
+    for s = 1 to num_segments do
+      segment = purp_params[s][1]
+      params = purp_params.(segment).(params)
+      coeffs = purp_params.(segment).(coeffs)
+      prefix = period + "_" + purp + "_" + segment
 
-    max_iters = if (params.max_iters = null) then 1 else params.max_iters
-    // if iterating shadow price, set a min number of iterations
-    if max_iters > 1 then min_iters = min(10, max_iters)
-    prod_field = "d_" + period + "_" + purp + "_" + segment
-    attr_field = "d_" + period + "_" + purp + "a_" + segment
+      max_iters = if (params.max_iters = null) then 1 else params.max_iters
+      // if iterating shadow price, set a min number of iterations
+      if max_iters > 1 then min_iters = min(10, max_iters)
+      prod_field = "d_" + period + "_" + purp + "_" + segment
+      attr_field = "d_" + period + "_" + purp + "a_" + segment
 
-    // Fill dc_size column with appropriate attraction info
-    // Fill shadow price with 0s
-    se_tbl = OpenTable("ScenarioSE", "FFB", {se_bin})
-    v_attr = nz(GetDataVector(se_tbl + "|", attr_field, ))
-    v_attr = if (v_attr = 0) then 0 else log(v_attr)
-    SetDataVector(se_tbl + "|", "dc_size", v_attr, )
-    v_sp = if (nz(v_attr) >= 0) then 0 else 0
-    SetDataVector(se_tbl + "|", "shadow_price", v_sp, )
-    CloseView(se_tbl)
+      // Fill dc_size column with appropriate attraction info
+      // Fill shadow price with 0s
+      se_tbl = OpenTable("ScenarioSE", "FFB", {se_bin})
+      v_attr = nz(GetDataVector(se_tbl + "|", attr_field, ))
+      v_attr = if (v_attr = 0) then 0 else log(v_attr)
+      SetDataVector(se_tbl + "|", "dc_size", v_attr, )
+      v_sp = if (nz(v_attr) >= 0) then 0 else 0
+      SetDataVector(se_tbl + "|", "shadow_price", v_sp, )
+      CloseView(se_tbl)
 
-    // Calculate distance cores required by DC
-    RunMacro("Calc DC Matrix Cores", params.dist_cap, skim_file, period)
+      // Calculate distance cores required by DC
+      RunMacro("Calc DC Matrix Cores", params.dist_cap, skim_file, period)
 
-    // Create a copy of the template dcm file and update its
-    // attributes.
-    // The DC Model Application GUI does not support market segments like MC.
-    // For now, make a separate mdl copy for each segment in addition to
-    // period and purpose. Emailed Caliper to see if segments can be created
-    // through NLM.Model methods that will be respected during application.
-    dcm = output_dir + "/" + prefix + ".dcm"
-    CopyFile(template_dcm, dcm)
+      // Create a copy of the template dcm file and update its
+      // attributes.
+      // The DC Model Application GUI does not support market segments like MC.
+      // For now, make a separate mdl copy for each segment in addition to
+      // period and purpose. Emailed Caliper to see if segments can be created
+      // through NLM.Model methods that will be respected during application.
+      dcm = output_dir + "/" + prefix + ".dcm"
+      CopyFile(template_dcm, dcm)
 
-    // Create model object.  The segment for DC is always "*".
-    model = null
-    model = CreateObject("NLM.Model")
-    model.Read(dcm, 1)
-    seg = model.GetSegment("*")
+      // Create model object.  The segment for DC is always "*".
+      model = null
+      model = CreateObject("NLM.Model")
+      model.Read(dcm, 1)
+      seg = model.GetSegment("*")
 
-    // Change totals field (the productions)
-    source = model.Sources.Get("zone_tbl") // name of se table in template dcm
-    da = source.CreateDataAccess("totals", prod_field, )
-    seg.SetTotals(da)
+      // Change totals field (the productions)
+      source = model.Sources.Get("zone_tbl") // name of se table in template dcm
+      da = source.CreateDataAccess("totals", prod_field, )
+      seg.SetTotals(da)
 
-    // Change coefficients
-    for fld = 1 to model.GetFieldCount() do
-      field = model.GetField(fld)
-      term = seg.GetTerm(field.Name)
-      term.Coeff = nz(coeffs.(field.Name))
-    end
-
-    // write out the new dcm file for manual review
-    model.Write(dcm)
-    model.Clear()
-
-    // Run the model
-    dc_iter = 1
-    pct_rmse = 100
-    rmse_target = 5 // percent
-    while pct_rmse > rmse_target and dc_iter <= max_iters do
-      Opts = null
-      Opts.Global.[Missing Method] = "Drop Mode"
-      Opts.Global.[Base Method] = "On View"
-      Opts.Global.[Small Volume To Skip] = 0.001
-      Opts.Global.[Utility Scaling] = "None"
-      Opts.Global.Model = dcm
-      Opts.Flag.[To Output Utility] = 1
-      Opts.Flag.Aggregate = 1
-      Opts.Flag.[Destination Choice] = 1
-      Opts.Input.[skim_mtx Matrix] = skim_file
-      Opts.Input.[zone_tbl Set] = {se_bin, "ScenarioSE", se_set_name, se_set_query}
-      // Probability matrix
-      file_name = "probabilities_" + prefix + ".MTX"
-      file_path = output_dir + "/" + file_name
-      Opts.Output.[Probability Matrix].Label = prefix + " Probability"
-      Opts.Output.[Probability Matrix].Compression = 1
-      Opts.Output.[Probability Matrix].FileName = file_name
-      Opts.Output.[Probability Matrix].[File Name] = file_path
-      // Trips matrix
-      trip_file = "trips_" + prefix + ".MTX"
-      trip_path = output_dir + "/" + trip_file
-      Opts.Output.[Applied Totals Matrix].Label = prefix + " Trips"
-      Opts.Output.[Applied Totals Matrix].Compression = 1
-      Opts.Output.[Applied Totals Matrix].FileName = trip_file
-      Opts.Output.[Applied Totals Matrix].[File Name] = trip_path
-      // Utility matrix
-      file_name = "utilities_" + prefix + ".MTX"
-      file_path = output_dir + "/" + file_name
-      Opts.Output.[Utility Matrix].Label = prefix + " Utility"
-      Opts.Output.[Utility Matrix].Compression = 1
-      Opts.Output.[Utility Matrix].FileName = file_name
-      Opts.Output.[Utility Matrix].[File Name] = file_path
-
-      ret_value = RunMacro("TCB Run Procedure", "NestedLogitEngine", Opts, &Ret)
-      if !ret_value then do
-        error = Ret[1][1]
-        if Left(error, 17) = "Cannot create key" then do
-        err_parts = SplitString(error)
-        proper_set_name = err_parts[2]
-          Throw(
-            "The selection set named used in the script ('" + se_set_name + "')\n" +
-            "does not match the one used during the template (.dcm) creation\n" +
-            "('" + proper_set_name + "')"
-          )
-        end else Throw("Destination choice model failed")
+      // Change coefficients
+      for fld = 1 to model.GetFieldCount() do
+        field = model.GetField(fld)
+        term = seg.GetTerm(field.Name)
+        term.Coeff = nz(coeffs.(field.Name))
       end
 
-      // Export column marginals to table
-      m = OpenMatrix(trip_path,)
-      mc = CreateMatrixCurrency(m,,,,)
-      marginal_bin = output_dir + "/marginal.bin"
-      ExportMatrix(mc,, "Columns", "FFB", marginal_bin, {{"Marginal", "Sum"}})
-      mc = null
-      m = null
+      // write out the new dcm file for manual review
+      model.Write(dcm)
+      model.Clear()
 
-      // Open matrix marginal table table and join to the se table
-      vw_se = OpenTable("se", "FFB", {se_bin})
-      vw_marg = OpenTable("temp", "FFB", {marginal_bin,},)
-      {flds, specs} = GetFields(vw_marg,)
-      SetView(vw_se)
-      vw_join = JoinViews("jv", vw_se + ".ID", vw_marg + "." + flds[1],)
-      SetView(vw_join)
-      qry = "Select * where " + vw_se + "." + attr_field + " > 0"
-      n = SelectByQuery("selection", "several", qry)
+      // Run the model
+      dc_iter = 1
+      pct_rmse = 100
+      rmse_target = 5 // percent
+      while pct_rmse > rmse_target and dc_iter <= max_iters do
+        Opts = null
+        Opts.Global.[Missing Method] = "Drop Mode"
+        Opts.Global.[Base Method] = "On View"
+        Opts.Global.[Small Volume To Skip] = 0.001
+        Opts.Global.[Utility Scaling] = "None"
+        Opts.Global.Model = dcm
+        Opts.Flag.[To Output Utility] = 1
+        Opts.Flag.Aggregate = 1
+        Opts.Flag.[Destination Choice] = 1
+        Opts.Input.[skim_mtx Matrix] = skim_file
+        Opts.Input.[zone_tbl Set] = {se_bin, "ScenarioSE", se_set_name, se_set_query}
+        // Probability matrix
+        file_name = "probabilities_" + prefix + ".MTX"
+        file_path = output_dir + "/" + file_name
+        Opts.Output.[Probability Matrix].Label = prefix + " Probability"
+        Opts.Output.[Probability Matrix].Compression = 1
+        Opts.Output.[Probability Matrix].FileName = file_name
+        Opts.Output.[Probability Matrix].[File Name] = file_path
+        // Trips matrix
+        trip_file = "trips_" + prefix + ".MTX"
+        trip_path = output_dir + "/" + trip_file
+        Opts.Output.[Applied Totals Matrix].Label = prefix + " Trips"
+        Opts.Output.[Applied Totals Matrix].Compression = 1
+        Opts.Output.[Applied Totals Matrix].FileName = trip_file
+        Opts.Output.[Applied Totals Matrix].[File Name] = trip_path
+        // Utility matrix
+        file_name = "utilities_" + prefix + ".MTX"
+        file_path = output_dir + "/" + file_name
+        Opts.Output.[Utility Matrix].Label = prefix + " Utility"
+        Opts.Output.[Utility Matrix].Compression = 1
+        Opts.Output.[Utility Matrix].FileName = file_name
+        Opts.Output.[Utility Matrix].[File Name] = file_path
 
-      // Calculate RMSE
-      v_target = GetDataVector(vw_join + "|", vw_se + "." + attr_field, )
-      v_result = GetDataVector(vw_join + "|", vw_marg + "." + flds[2], )
-      {rmse, pct_rmse} = RunMacro("Calculate Vector RMSE", v_target, v_result)
+        ret_value = RunMacro("TCB Run Procedure", "NestedLogitEngine", Opts, &Ret)
+        if !ret_value then do
+          error = Ret[1][1]
+          if Left(error, 17) = "Cannot create key" then do
+          err_parts = SplitString(error)
+          proper_set_name = err_parts[2]
+            Throw(
+              "The selection set named used in the script ('" + se_set_name + "')\n" +
+              "does not match the one used during the template (.dcm) creation\n" +
+              "('" + proper_set_name + "')"
+            )
+          end else Throw("Destination choice model failed")
+        end
 
-      // Calculate shadow price
-      v_sp = nz(GetDataVector(vw_join + "|", vw_se + ".shadow_price", ))
-      v_sp = v_sp + log(v_target / v_result)
-      SetDataVector(vw_join + "|", vw_se + ".shadow_price", v_sp, )
-      CloseView(vw_join)
-      CloseView(vw_se)
-      CloseView(vw_marg)
+        // Export column marginals to table
+        m = OpenMatrix(trip_path,)
+        mc = CreateMatrixCurrency(m,,,,)
+        marginal_bin = output_dir + "/marginal.bin"
+        ExportMatrix(mc,, "Columns", "FFB", marginal_bin, {{"Marginal", "Sum"}})
+        mc = null
+        m = null
 
-      // Require the min_iters be performed
-      if dc_iter < min_iters then pct_rmse = 100
-      dc_iter = dc_iter + 1
+        // Open matrix marginal table table and join to the se table
+        vw_se = OpenTable("se", "FFB", {se_bin})
+        vw_marg = OpenTable("temp", "FFB", {marginal_bin,},)
+        {flds, specs} = GetFields(vw_marg,)
+        SetView(vw_se)
+        vw_join = JoinViews("jv", vw_se + ".ID", vw_marg + "." + flds[1],)
+        SetView(vw_join)
+        qry = "Select * where " + vw_se + "." + attr_field + " > 0"
+        n = SelectByQuery("selection", "several", qry)
 
-      // To simplify project code using this macro, never let the final trip matrix
-      // have fewer rows/columns than all centroids. Thus, if a selection set was
-      // applied, expand the matrix. The new rows/columns will be null.
-      if se_set_name <> null then do
+        // Calculate RMSE
+        v_target = GetDataVector(vw_join + "|", vw_se + "." + attr_field, )
+        v_result = GetDataVector(vw_join + "|", vw_marg + "." + flds[2], )
+        {rmse, pct_rmse} = RunMacro("Calculate Vector RMSE", v_target, v_result)
 
-        // Copy the skim matrix structure to a temp file
-        skim_mtx = OpenMatrix(skim_file, )
-        a_skim_mcs = CreateMatrixCurrencies(skim_mtx, , , )
-        temp_file = output_dir + "/temp.mtx"
-        opts = null
-        opts.[File Name] = temp_file
-        opts.Label = purp + " " + period + " Trips"
-        opts.Type = "Float"
-        opts.Tables = {a_skim_mcs[1][1]}
-        CopyMatrixStructure({a_skim_mcs[1][2]}, opts)
+        // Calculate shadow price
+        v_sp = nz(GetDataVector(vw_join + "|", vw_se + ".shadow_price", ))
+        v_sp = v_sp + log(v_target / v_result)
+        SetDataVector(vw_join + "|", vw_se + ".shadow_price", v_sp, )
+        CloseView(vw_join)
+        CloseView(vw_se)
+        CloseView(vw_marg)
 
-        // Transfer data
-        trip_mtx = OpenMatrix(trip_path, )
-        a_trip_mcs = CreateMatrixCurrencies(trip_mtx, , , )
-        temp_mtx = OpenMatrix(temp_file, )
-        a_temp_mcs = CreateMatrixCurrencies(temp_mtx, , , )
-        a_temp_mcs[1][2] := 0
-        MergeMatrixElements(a_temp_mcs[1][2], {a_trip_mcs[1][2]}, , , )
-        SetMatrixCoreName(temp_mtx, a_skim_mcs[1][1], "Total")
+        // Require the min_iters be performed
+        if dc_iter < min_iters then pct_rmse = 100
+        dc_iter = dc_iter + 1
 
-        // Change the row/col index to match
-        {ri, ci} = GetMatrixIndex(trip_mtx)
-        {temp_ri, temp_ci} = GetMatrixIndex(temp_mtx)
-        SetMatrixIndexName(temp_mtx, temp_ri, ri)
-        SetMatrixIndexName(temp_mtx, temp_ci, ci)
+        // To simplify project code using this macro, never let the final trip matrix
+        // have fewer rows/columns than all centroids. Thus, if a selection set was
+        // applied, expand the matrix. The new rows/columns will be null.
+        if se_set_name <> null then do
 
-        // Clean up workspace and replace dc output matrix with temp
-        skim_mtx = null
-        a_skim_mcs = null
-        a_trip_mcs = null
-        trip_mtx = null
-        temp_mtx = null
-        a_temp_mcs = null
-        DeleteFile(trip_path)
-        RenameFile(temp_file, trip_file)
+          // Copy the skim matrix structure to a temp file
+          skim_mtx = OpenMatrix(skim_file, )
+          a_skim_mcs = CreateMatrixCurrencies(skim_mtx, , , )
+          temp_file = output_dir + "/temp.mtx"
+          opts = null
+          opts.[File Name] = temp_file
+          opts.Label = purp + " " + period + " Trips"
+          opts.Type = "Float"
+          opts.Tables = {a_skim_mcs[1][1]}
+          CopyMatrixStructure({a_skim_mcs[1][2]}, opts)
+
+          // Transfer data
+          trip_mtx = OpenMatrix(trip_path, )
+          a_trip_mcs = CreateMatrixCurrencies(trip_mtx, , , )
+          temp_mtx = OpenMatrix(temp_file, )
+          a_temp_mcs = CreateMatrixCurrencies(temp_mtx, , , )
+          a_temp_mcs[1][2] := 0
+          MergeMatrixElements(a_temp_mcs[1][2], {a_trip_mcs[1][2]}, , , )
+          SetMatrixCoreName(temp_mtx, a_skim_mcs[1][1], "Total")
+
+          // Change the row/col index to match
+          {ri, ci} = GetMatrixIndex(trip_mtx)
+          {temp_ri, temp_ci} = GetMatrixIndex(temp_mtx)
+          SetMatrixIndexName(temp_mtx, temp_ri, ri)
+          SetMatrixIndexName(temp_mtx, temp_ci, ci)
+
+          // Clean up workspace and replace dc output matrix with temp
+          skim_mtx = null
+          a_skim_mcs = null
+          a_trip_mcs = null
+          trip_mtx = null
+          temp_mtx = null
+          a_temp_mcs = null
+          DeleteFile(trip_path)
+          RenameFile(temp_file, trip_file)
+        end
       end
     end
-  end
   end
 
   // Clean up workspace
