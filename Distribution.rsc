@@ -504,7 +504,7 @@ right dimension.
 
 Macro "Expand Matrix to All Nodes" (mtx_file, skim_file)
 
-  // Copy the skim matrix structure to a temp file
+  // Copy the skim matrix structure to a temp file. Will only have one core.
   skim_mtx = OpenMatrix(skim_file, )
   a_skim_mcs = CreateMatrixCurrencies(skim_mtx, , , )
   temp_mtx_file = output_dir + "/temp.mtx"
@@ -515,14 +515,27 @@ Macro "Expand Matrix to All Nodes" (mtx_file, skim_file)
   opts.Tables = {a_skim_mcs[1][1]}
   CopyMatrixStructure({a_skim_mcs[1][2]}, opts)
 
-  // Transfer data
+  // Open matrices and create currencies
   mtx = OpenMatrix(mtx_file, )
   a_mtx_mcs = CreateMatrixCurrencies(mtx, , , )
   temp_mtx = OpenMatrix(temp_mtx_file, )
   a_temp_mcs = CreateMatrixCurrencies(temp_mtx, , , )
-  a_temp_mcs[1][2] := 0
-  MergeMatrixElements(a_temp_mcs[1][2], {a_mtx_mcs[1][2]}, , , )
-  SetMatrixCoreName(temp_mtx, a_skim_mcs[1][1], "Total")
+
+  // Add each core from mtx_file into the temp matrix
+  for mc = 1 to a_mtx_mcs.length do
+    final_core_name = a_mtx_mcs[mc][1]
+    final_cur = a_mtx_mcs.(final_core_name)
+
+    if mc = 1 then do
+      a_temp_mcs[1][2] := null
+      MergeMatrixElements(a_temp_mcs[1][2], final_cur, , , )
+      SetMatrixCoreName(temp_mtx, a_skim_mcs[1][1], final_core_name)
+    end else do
+      AddMatrixCore(temp_mtx, final_core_name)
+      temp_cur = CreateMatrixCurrency(temp_mtx, final_core_name, , , )
+      MergeMatrixElements(temp_cur, final_cur, , , )
+    end
+  end
 
   // Change the row/col index to match
   {ri, ci} = GetMatrixIndex(mtx)
@@ -530,7 +543,7 @@ Macro "Expand Matrix to All Nodes" (mtx_file, skim_file)
   SetMatrixIndexName(temp_mtx, temp_ri, ri)
   SetMatrixIndexName(temp_mtx, temp_ci, ci)
 
-  // Clean up workspace and replace mtx_file with temp
+  // Clean up workspace and replace mtx_file with temp_mtx_file
   skim_mtx = null
   a_skim_mcs = null
   a_mtx_mcs = null
