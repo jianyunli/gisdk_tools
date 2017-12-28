@@ -37,14 +37,13 @@ Inputs
     matrices
       Named array
       Defines the file and (optional) index to use for each matrix data source.
-      Must be nested by time periods that match the param_file and matrix names
-      that match those in the template_mdl file.
+      Must be nested by matrix names that match those in the template_mdl file.
 
       For example:
-        matrices.PK.hwy_skim.file = ".../skim.mtx"
-        matrices.PK.hwy_skim.index = "internal"
-        where "PK" is one of the periods in the param_file and "hwy_skim" is the
-        name of one of the data sources in the template_mdl file.
+        matrices.hwy_skim.file = ".../skim.mtx"
+        matrices.hwy_skim.index = "internal"
+        where "hwy_skim" is the name of one of the data sources in the
+        template_mdl file.
 
     template_mdl
       String
