@@ -507,7 +507,8 @@ Macro "Expand Matrix to All Nodes" (mtx_file, skim_file)
   // Copy the skim matrix structure to a temp file. Will only have one core.
   skim_mtx = OpenMatrix(skim_file, )
   a_skim_mcs = CreateMatrixCurrencies(skim_mtx, , , )
-  temp_mtx_file = output_dir + "/temp.mtx"
+  {drive, folder, name, ext} = SplitPath(mtx_file)
+  temp_mtx_file = drive + folder + "/temp.mtx"
   opts = null
   opts.[File Name] = temp_mtx_file
   opts.Label = purp + " " + period + " Trips"
@@ -528,12 +529,12 @@ Macro "Expand Matrix to All Nodes" (mtx_file, skim_file)
 
     if mc = 1 then do
       a_temp_mcs[1][2] := null
-      MergeMatrixElements(a_temp_mcs[1][2], final_cur, , , )
+      MergeMatrixElements(a_temp_mcs[1][2], {final_cur}, , , )
       SetMatrixCoreName(temp_mtx, a_skim_mcs[1][1], final_core_name)
     end else do
       AddMatrixCore(temp_mtx, final_core_name)
       temp_cur = CreateMatrixCurrency(temp_mtx, final_core_name, , , )
-      MergeMatrixElements(temp_cur, final_cur, , , )
+      MergeMatrixElements(temp_cur, {final_cur}, , , )
     end
   end
 
@@ -550,6 +551,8 @@ Macro "Expand Matrix to All Nodes" (mtx_file, skim_file)
   mtx = null
   temp_mtx = null
   a_temp_mcs = null
+  final_cur = null
+  temp_cur = null  
   DeleteFile(mtx_file)
   {drive, directory, name, ext} = SplitPath(mtx_file)
   RenameFile(temp_mtx_file, name + ext)

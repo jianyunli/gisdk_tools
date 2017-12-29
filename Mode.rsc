@@ -238,8 +238,9 @@ Macro "GT - Mode Choice NLM" (MacroOpts)
     // Make sure output matrices match skim matrix dimensions
     if tables.zone_tbl.set_name <> null then do
       skim_file = matrices[1][2].file
+      // for each market segment
       for i = 1 to nle_opts.Output.[Probability Matrices].length do
-        trip_path = nle_opts.Output.[Probability Matrices][i].file_path
+        trip_path = nle_opts.Output.[Probability Matrices][i].[File Name]
         RunMacro("Expand Matrix to All Nodes", trip_path, skim_file)
       end
     end
