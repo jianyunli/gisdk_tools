@@ -39,29 +39,29 @@ Macro "Gravity" (MacroOpts)
     imp_core = params.imp_core
     cur = CreateMatrixCurrency(skim_mtx, imp_core, ri, ci, )
 
-    Opts = null
-    Opts.Input.[PA View Set] = {se_bin, vw_se}
-    Opts.Input.[FF Tables] = {}
-    Opts.Input.[Imp Matrix Currencies] = {cur}
-    Opts.Input.[FF Matrix Currencies] = {}
-    Opts.Global.[Constraint Type] = {params.constraint}
-    Opts.Global.[Purpose Names] = {purp}
-    Opts.Global.Iterations = {50}
-    Opts.Global.Convergence = {0.001}
-    Opts.Global.[Fric Factor Type] = {"Gamma"}
-    Opts.Global.[A List] = {params.a}
-    Opts.Global.[B List] = {params.b}
-    Opts.Global.[C List] = {params.c}
-    Opts.Global.[Minimum Friction Value] = {0}
-    Opts.Field.[Prod Fields] = {params.p_field}
-    Opts.Field.[Attr Fields] = {params.a_field}
-    Opts.Field.[FF Table Times] = {}
-    Opts.Field.[FF Table Fields] = {}
-    Opts.Output.[Output Matrix].Label = purp + " Gravity Matrix"
-    Opts.Output.[Output Matrix].Compression = 1
+    opts = null
+    opts.Input.[PA View Set] = {se_bin, vw_se}
+    opts.Input.[FF Tables] = {}
+    opts.Input.[Imp Matrix Currencies] = {cur}
+    opts.Input.[FF Matrix Currencies] = {}
+    opts.Global.[Constraint Type] = {params.constraint}
+    opts.Global.[Purpose Names] = {purp}
+    opts.Global.Iterations = {50}
+    opts.Global.Convergence = {0.001}
+    opts.Global.[Fric Factor Type] = {"Gamma"}
+    opts.Global.[A List] = {params.a}
+    opts.Global.[B List] = {params.b}
+    opts.Global.[C List] = {params.c}
+    opts.Global.[Minimum Friction Value] = {0}
+    opts.Field.[Prod Fields] = {params.p_field}
+    opts.Field.[Attr Fields] = {params.a_field}
+    opts.Field.[FF Table Times] = {}
+    opts.Field.[FF Table Fields] = {}
+    opts.Output.[Output Matrix].Label = purp + " Gravity Matrix"
+    opts.Output.[Output Matrix].Compression = 1
     out_file = output_dir + "/trips_" + purp + "_" + period + ".mtx"
-    Opts.Output.[Output Matrix].[File Name] = out_file
-    ret_value = RunMacro("TCB Run Procedure", "Gravity", Opts, &Ret)
+    opts.Output.[Output Matrix].[File Name] = out_file
+    ret_value = RunMacro("TCB Run Procedure", "Gravity", opts, &Ret)
     if !ret_value then Throw("Gravity model failed")
   end
 EndMacro
