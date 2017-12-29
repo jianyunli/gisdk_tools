@@ -258,55 +258,56 @@ Macro "GT - Combine MC Matrices" (MacroOpts)
 
   output_dir = MacroOpts.output_dir
   param_file = MacroOpts.param_file
+  period = MacroOpts.period
 
   // Use the parameter file to get the unique values of period, purpose, and
   // segment.
   df = CreateObject("df")
   df.read_csv(param_file)
-  v_periods = df.unique(df.tbl.Period)
+  df.filter("Period = '" + period + "'")
+  a_types = {"probabilities", "logsums", "utilities"}
   v_purposes = df.unique(df.tbl.Purpose)
   v_segments = df.unique(df.tbl.Segment)
-  a_types = {"probabilities", "logsums", "utilities"}
 
-  // Loop over each period, purpose, segment, and matrix
-  for period in v_periods do
-    to_mtx_file = output_dir + "/_" + period + "_mc_share_results.mtx"
-    if GetFileInfo(to_mtx_file) <> null then DeleteFile(to_mtx_file)
+  to_mtx_file = output_dir + "/_" + period + "_mc_share_results.mtx"
+  if GetFileInfo(to_mtx_file) <> null then DeleteFile(to_mtx_file)
 
-    for type in a_types do
-      for purpose in v_purposes do
-        for segment in v_segments do
-          from_mtx_file = output_dir + "/" + type + "_" + period + "_" +
-            purpose + "_" + segment + ".mtx"
+  // Loop over each purpose, segment, and matrix
+  for type in a_types do
+    for purpose in v_purposes do
+      for segment in v_segments do
+        from_mtx_file = output_dir + "/" + type + "_" + period + "_" +
+          purpose + "_" + segment + ".mtx"
 
-          a_to_delete = a_to_delete + {from_mtx_file}
-          from_mtx = OpenMatrix(from_mtx_file, )
-          a_core_names = GetMatrixCoreNames(from_mtx)
-          v_core_names = type + " " + purpose + " " + segment + " " + A2V(a_core_names)
-          a_final_core_names = a_final_core_names + V2A(v_core_names)
-          a_temp = CreateMatrixCurrencies(from_mtx, , , )
-          for a = 1 to a_temp.length do
-            a_from_curs = a_from_curs + {a_temp[a][2]}
-          end
+        a_to_delete = a_to_delete + {from_mtx_file}
+        from_mtx = OpenMatrix(from_mtx_file, )
+        a_core_names = GetMatrixCoreNames(from_mtx)
+        v_core_names = type + " " + purpose + " " + segment + " " + A2V(a_core_names)
+        a_final_core_names = a_final_core_names + V2A(v_core_names)
+        a_temp = CreateMatrixCurrencies(from_mtx, , , )
+        for a = 1 to a_temp.length do
+          a_from_curs = a_from_curs + {a_temp[a][2]}
         end
       end
     end
-
-    // Combine all matrix currencies into a single matrix
-    opts = null
-    opts.[File Name] = to_mtx_file
-    opts.Label = period + " mc share results"
-    CombineMatrices(a_from_curs, opts)
-    a_from_curs = null
-
-    // Rename cores
-    to_mtx = OpenMatrix(to_mtx_file, )
-    SetMatrixCoreNames(to_mtx, a_final_core_names)
-    a_final_core_names = null
   end
+
+  // Combine all matrix currencies into a single matrix
+  opts = null
+  opts.[File Name] = to_mtx_file
+  opts.Label = period + " mc share results"
+  CombineMatrices(a_from_curs, opts)
+  a_from_curs = null
+
+  // Rename cores
+  to_mtx = OpenMatrix(to_mtx_file, )
+  SetMatrixCoreNames(to_mtx, a_final_core_names)
+  a_final_core_names = null
+
 
   // Delete all the individual matrices
   from_mtx = null
+  a_temp = null
   for file in a_to_delete do
     DeleteFile(file)
   end
