@@ -128,20 +128,28 @@ Depends
     "Read Parameter File"
 */
 
-Macro "Destination Choice" (MacroOpts)
+Macro "GT - Destination Choice" (MacroOpts)
 
   // Extract arguments from named array
-  period = MacroOpts.period
+  /* period = MacroOpts.period
   se_bin = MacroOpts.se_bin
   output_dir = MacroOpts.output_dir
   param_file = MacroOpts.param_file
   template_dcm = MacroOpts.template_dcm
   skim_file = MacroOpts.skim_file
   se_set_name = MacroOpts.se_set_name
-  se_set_query = MacroOpts.se_set_query
+  se_set_query = MacroOpts.se_set_query */
+
+  // Argument extraction
+  period = MacroOpts.period
+  output_dir = MacroOpts.output_dir
+  template_dcm = MacroOpts.template_dcm
+  param_file = MacroOpts.param_file
+  tables = MacroOpts.tables
+  matrices = MacroOpts.matrices
 
   // Argument checks
-  if period = null then Throw("'period' not provided")
+  /* if period = null then Throw("'period' not provided")
   if se_bin = null then Throw("'se_bin' not provided")
   if output_dir = null then Throw("'output_dir' not provided")
   if param_file = null then Throw("'param_file' not provided")
@@ -152,7 +160,7 @@ Macro "Destination Choice" (MacroOpts)
   if se_set_name = null and se_set_query <> null
     then Throw("'se_set_name' and 'se_set_query' must both be provided.")
   if se_set_query <> null
-    then se_set_query = RunMacro("Normalize Query", se_set_query)
+    then se_set_query = RunMacro("Normalize Query", se_set_query) */
 
   // Read in the dc parameter file
   dc_params = RunMacro("Read Parameter File", param_file)
@@ -180,11 +188,11 @@ Macro "Destination Choice" (MacroOpts)
       coeffs = purp_params.(segment).(coeffs)
       prefix = period + "_" + purp + "_" + segment
 
+      prod_field = params.prod_field
+      attr_field = params.attr_field
       max_iters = if (params.max_iters = null) then 1 else params.max_iters
       // if iterating shadow price, set a min number of iterations
       if max_iters > 1 then min_iters = min(10, max_iters)
-      prod_field = "d_" + period + "_" + purp + "_" + segment
-      attr_field = "d_" + period + "_" + purp + "a_" + segment
 
       // Fill dc_size column with appropriate attraction info
       // Fill shadow price with 0s
@@ -214,8 +222,36 @@ Macro "Destination Choice" (MacroOpts)
       model.Read(dcm, 1)
       seg = model.GetSegment("*")
 
-      // Change totals field (the productions)
-      source = model.Sources.Get("zone_tbl") // name of se table in template dcm
+      // Update matrix sources and indices. This also begins building
+      // the 'nle_opts' options array for the NestedLogitEngine macro.
+      nle_opts = null
+      for matrix in matrices do
+        source_name = matrix[1]
+        opts = matrix[2]
+        // The name of the source, as it appears in the MDL/DCM file
+        source = model.Sources.Get(source_name)
+        if opts.index <> null then do
+          source.RowIdx = opts.index
+          source.ColIdx = opts.index
+        end
+        nle_opts.Input.(source_name + " Matrix") = opts.file
+      end
+
+      // Setup the table inputs for NLE
+      for table in tables do
+        source_name = table[1]
+        opts = table[2]
+        opts.query = RunMacro("Normalize Query", opts.query)
+        {drive, directory, name, ext} = SplitPath(opts.file)
+        nle_opts.Input.(source_name + " Set") = {
+          opts.file, name, opts.set_name, opts.query
+        }
+      end
+
+      // Change totals field (the productions). Assume that the first table
+      // in the tables array contains production info.
+      source_name = tables[1][1]
+      source = model.Sources.Get(source_name)
       da = source.CreateDataAccess("totals", prod_field, )
       seg.SetTotals(da)
 
@@ -235,40 +271,38 @@ Macro "Destination Choice" (MacroOpts)
       pct_rmse = 100
       rmse_target = 5 // percent
       while pct_rmse > rmse_target and dc_iter <= max_iters do
-        Opts = null
-        Opts.Global.[Missing Method] = "Drop Mode"
-        Opts.Global.[Base Method] = "On View"
-        Opts.Global.[Small Volume To Skip] = 0.001
-        Opts.Global.[Utility Scaling] = "None"
-        Opts.Global.Model = dcm
-        Opts.Flag.[To Output Utility] = 1
-        Opts.Flag.Aggregate = 1
-        Opts.Flag.[Destination Choice] = 1
-        Opts.Input.[skim_mtx Matrix] = skim_file
-        Opts.Input.[zone_tbl Set] = {se_bin, "ScenarioSE", se_set_name, se_set_query}
+        nle_opts = null
+        nle_opts.Global.[Missing Method] = "Drop Mode"
+        nle_opts.Global.[Base Method] = "On View"
+        nle_opts.Global.[Small Volume To Skip] = 0.001
+        nle_opts.Global.[Utility Scaling] = "None"
+        nle_opts.Global.Model = dcm
+        nle_opts.Flag.[To Output Utility] = 1
+        nle_opts.Flag.Aggregate = 1
+        nle_opts.Flag.[Destination Choice] = 1
         // Probability matrix
         file_name = "probabilities_" + prefix + ".MTX"
         file_path = output_dir + "/" + file_name
-        Opts.Output.[Probability Matrix].Label = prefix + " Probability"
-        Opts.Output.[Probability Matrix].Compression = 1
-        Opts.Output.[Probability Matrix].FileName = file_name
-        Opts.Output.[Probability Matrix].[File Name] = file_path
+        nle_opts.Output.[Probability Matrix].Label = prefix + " Probability"
+        nle_opts.Output.[Probability Matrix].Compression = 1
+        nle_opts.Output.[Probability Matrix].FileName = file_name
+        nle_opts.Output.[Probability Matrix].[File Name] = file_path
         // Trips matrix
         trip_file = "trips_" + prefix + ".MTX"
         trip_path = output_dir + "/" + trip_file
-        Opts.Output.[Applied Totals Matrix].Label = prefix + " Trips"
-        Opts.Output.[Applied Totals Matrix].Compression = 1
-        Opts.Output.[Applied Totals Matrix].FileName = trip_file
-        Opts.Output.[Applied Totals Matrix].[File Name] = trip_path
+        nle_opts.Output.[Applied Totals Matrix].Label = prefix + " Trips"
+        nle_opts.Output.[Applied Totals Matrix].Compression = 1
+        nle_opts.Output.[Applied Totals Matrix].FileName = trip_file
+        nle_opts.Output.[Applied Totals Matrix].[File Name] = trip_path
         // Utility matrix
         file_name = "utilities_" + prefix + ".MTX"
         file_path = output_dir + "/" + file_name
-        Opts.Output.[Utility Matrix].Label = prefix + " Utility"
-        Opts.Output.[Utility Matrix].Compression = 1
-        Opts.Output.[Utility Matrix].FileName = file_name
-        Opts.Output.[Utility Matrix].[File Name] = file_path
+        nle_opts.Output.[Utility Matrix].Label = prefix + " Utility"
+        nle_opts.Output.[Utility Matrix].Compression = 1
+        nle_opts.Output.[Utility Matrix].FileName = file_name
+        nle_opts.Output.[Utility Matrix].[File Name] = file_path
 
-        ret_value = RunMacro("TCB Run Procedure", "NestedLogitEngine", Opts, &Ret)
+        ret_value = RunMacro("TCB Run Procedure", "NestedLogitEngine", nle_opts, &Ret)
         if !ret_value then do
           error = Ret[1][1]
           if Left(error, 17) = "Cannot create key" then do
@@ -552,7 +586,7 @@ Macro "Expand Matrix to All Nodes" (mtx_file, skim_file)
   temp_mtx = null
   a_temp_mcs = null
   final_cur = null
-  temp_cur = null  
+  temp_cur = null
   DeleteFile(mtx_file)
   {drive, directory, name, ext} = SplitPath(mtx_file)
   RenameFile(temp_mtx_file, name + ext)
