@@ -87,40 +87,54 @@ dc_parameters.csv and template.dcm files.
 MacroOpts
   period
     String
-    Time period - e.g. "AM"
+    Time of day - e.g. "AM" or "PK". Must match a period in the param_file.
 
-  se_bin
-    String
-    Path of the se table
+  tables
+    Named array
+    Defines the file and (optional) selection set to use for each table data
+    source.
 
-  skim_file
-    String
-    Path to the skim mtx file
-    Must include core names referenced by param_file and template_dcm
+    For example:
+      tables.zone_tbl.file = se_bin
+      tables.zone_tbl.set_name = "internal"
+      tables.zone_tbl.query = "Select * where parish <> 'Ext'"
 
-  output_dir
-    String
-    Path of the folder to place output
+      where "zone_tbl" is the name of one of the table data sources in the
+      template_mdl file.
 
-  param_file
-    String
-    Path to the parameters csv file
+  matrices
+    Named array
+    Defines the file and (optional) index to use for each matrix data source.
+    Must be nested by matrix names that match those in the template_mdl file.
 
-  template_dcm
-    String
-    Path to the template dcm file
+    For example:
+      matrices.hwy_skim.file = ".../skim.mtx"
+      matrices.hwy_skim.index = "internal"
 
-  se_set_name
-    Optional String
-    If running DC on a subset of zones, use this to state the name of the
-    selection set. Must match what is listed in the template_dcm. If provided,
-    both se_set_name and se_set_query are required.
+      where "hwy_skim" is the name of one of the matrix data sources in the
+      template_mdl file.
 
-  se_set_query
-    Optional String
-    If running DC on a subset of zones, use this to define the selection set.
-    e.g. "InternalZone = 'Internal'" or "ID < 2000". If provided,
-    both se_set_name and se_set_query are required.
+    template_dcm
+      String
+      Path to the template model file (.dcm) to use. This file has matrix cores
+      and table fields needed to calculate utilities. The coefficients are
+      usually set to 0, as they are overwritten by the parameter file.
+
+    param_file
+      String
+      Path to the parameter file. This file contains the utility coefficients.
+      It is specified by time period, purpose, and market segment.
+
+      For Example:
+        Period | Purpose | Segment| Section | Term     | Value | Description
+        PK     | HBW     | inc1   | coeffs  | size     |   1   | coefficient of attraction size term
+        PK     | HBW     | inc1   | params  | dist_cap |   7   | cap on distance polynomial
+        etc
+
+    output_dir
+      String
+      Path to the output directory. This is the folder where all outputs will
+      be stored.
 
 
 Depends
@@ -129,16 +143,6 @@ Depends
 */
 
 Macro "GT - Destination Choice" (MacroOpts)
-
-  // Extract arguments from named array
-  /* period = MacroOpts.period
-  se_bin = MacroOpts.se_bin
-  output_dir = MacroOpts.output_dir
-  param_file = MacroOpts.param_file
-  template_dcm = MacroOpts.template_dcm
-  skim_file = MacroOpts.skim_file
-  se_set_name = MacroOpts.se_set_name
-  se_set_query = MacroOpts.se_set_query */
 
   // Argument extraction
   period = MacroOpts.period
@@ -149,18 +153,16 @@ Macro "GT - Destination Choice" (MacroOpts)
   matrices = MacroOpts.matrices
 
   // Argument checks
-  /* if period = null then Throw("'period' not provided")
-  if se_bin = null then Throw("'se_bin' not provided")
+  if period = null then Throw("'period' not provided")
   if output_dir = null then Throw("'output_dir' not provided")
   if param_file = null then Throw("'param_file' not provided")
   if template_dcm = null then Throw("'template_dcm' not provided")
-  if skim_file = null then Throw("'skim_file' not provided")
-  if se_set_name <> null and se_set_query = null
-    then Throw("'se_set_name' and 'se_set_query' must both be provided.")
-  if se_set_name = null and se_set_query <> null
-    then Throw("'se_set_name' and 'se_set_query' must both be provided.")
-  if se_set_query <> null
-    then se_set_query = RunMacro("Normalize Query", se_set_query) */
+  if tables = null then Throw("'tables' not provided")
+  if matrices = null then Throw("'matrices' not provided")
+
+  // Assume the major se/zonal table and skim file are the first files listed.
+  se_bin = tables[1][2].file
+  skim_file = matrices[1][2].file
 
   // Read in the dc parameter file
   dc_params = RunMacro("Read Parameter File", param_file)
@@ -303,18 +305,6 @@ Macro "GT - Destination Choice" (MacroOpts)
         nle_opts.Output.[Utility Matrix].[File Name] = file_path
 
         ret_value = RunMacro("TCB Run Procedure", "NestedLogitEngine", nle_opts, &Ret)
-        if !ret_value then do
-          error = Ret[1][1]
-          if Left(error, 17) = "Cannot create key" then do
-          err_parts = SplitString(error)
-          proper_set_name = err_parts[2]
-            Throw(
-              "The selection set named used in the script ('" + se_set_name + "')\n" +
-              "does not match the one used during the template (.dcm) creation\n" +
-              "('" + proper_set_name + "')"
-            )
-          end else Throw("Destination choice model failed")
-        end
 
         // Export column marginals to table
         m = OpenMatrix(trip_path,)
@@ -354,8 +344,8 @@ Macro "GT - Destination Choice" (MacroOpts)
         // To simplify project code using this macro, make sure that the final
         // matrix dimensions include all centroids. Thus, if a selection set was
         // applied, expand the matrix. The new rows/columns will be null.
-        if se_set_name <> null
-          then RunMacro("Expand Matrix to All Nodes", trip_path, skim_file)
+        if tables[1][2].query <> null
+          then RunMacro("Expand Matrix to All Centroids", trip_path, skim_file)
       end
     end
   end
@@ -536,7 +526,7 @@ It makes everything easier to have the output matrices of DC and MC be the
 right dimension.
 */
 
-Macro "Expand Matrix to All Nodes" (mtx_file, skim_file)
+Macro "Expand Matrix to All Centroids" (mtx_file, skim_file)
 
   // Copy the skim matrix structure to a temp file. Will only have one core.
   skim_mtx = OpenMatrix(skim_file, )

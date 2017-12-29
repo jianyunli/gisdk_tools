@@ -33,6 +33,8 @@ Inputs
         tables.zone_tbl.set_name = "internal"
         tables.zone_tbl.query = "Select * where parish <> 'Ext'"
 
+        where "zone_tbl" is the name of one of the table data sources in the
+        template_mdl file.
 
     matrices
       Named array
@@ -42,7 +44,8 @@ Inputs
       For example:
         matrices.hwy_skim.file = ".../skim.mtx"
         matrices.hwy_skim.index = "internal"
-        where "hwy_skim" is the name of one of the data sources in the
+
+        where "hwy_skim" is the name of one of the matrix data sources in the
         template_mdl file.
 
     template_mdl
@@ -241,7 +244,7 @@ Macro "GT - Mode Choice NLM" (MacroOpts)
       // for each market segment
       for i = 1 to nle_opts.Output.[Probability Matrices].length do
         trip_path = nle_opts.Output.[Probability Matrices][i].[File Name]
-        RunMacro("Expand Matrix to All Nodes", trip_path, skim_file)
+        RunMacro("Expand Matrix to All Centroids", trip_path, skim_file)
       end
     end
   end
