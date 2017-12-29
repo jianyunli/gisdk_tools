@@ -5,18 +5,6 @@ as well as some utility scripts that support manipulation of .mdl files.
 */
 
 /*
-Main macro.
-Runs the various macros that make up GTs general mode choice model.
-*/
-
-Macro "GT - Mode Choice" (MacroOpts)
-
-  RunMacro("GT - Mode Choice NLM", MacroOpts)
-  RunMacro("GT - Combine MC Matrices", MacroOpts)
-  RunMacro("Close All")
-EndMacro
-
-/*
 Inputs
   MacroOpts
     period
@@ -72,6 +60,11 @@ Inputs
       String
       Path to the output directory. This is the folder where all outputs will
       be stored.
+
+    combine_outputs
+      Optional True/False
+      If true (default), all output matrices from MC will be combined into
+      a single matrix for each period.
 */
 
 Macro "GT - Mode Choice NLM" (MacroOpts)
@@ -83,6 +76,9 @@ Macro "GT - Mode Choice NLM" (MacroOpts)
   template_mdl = MacroOpts.template_mdl
   param_file = MacroOpts.param_file
   output_dir = MacroOpts.output_dir
+  combine_outputs = MacroOpts.combine_outputs
+
+  if combine_outputs = null then combine_outputs = "true"
 
   // Read in the parameter file
   mc_params = RunMacro("Read Parameter File", param_file)
@@ -249,12 +245,24 @@ Macro "GT - Mode Choice NLM" (MacroOpts)
     end
   end
 
+  if combine_outputs then RunMacro("GT - Combine MC Matrices", MacroOpts)
+
   RunMacro("Close All")
 EndMacro
 
 /*
 The NLM model will create three matrices for each combination of period,
-purpose, and segment. This macro combines all of that into period matrices.
+purpose, and segment. This macro combines all of them into period matrices.
+This macro is called by "GT - Mode Choice NLM" if the "combine_outputs" option
+is true.
+
+Inputs
+  MacroOpts
+    output_dir
+    param_file
+    period
+
+  All three inputs are identical to those needed by "GT - Mode Choice NLM"
 */
 
 Macro "GT - Combine MC Matrices" (MacroOpts)
