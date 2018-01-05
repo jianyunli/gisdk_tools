@@ -1123,6 +1123,88 @@ Macro "field_xwalk_df_csv" (MacroOpts)
 EndMacro
 
 /*
+This function uses a parameter table to calculate fields based on formulas.
+
+Inputs
+  table
+    String
+    Path to bin file where field will be added.
+
+  param_tbl
+    String
+    Path to csv paramter table that contains formulas to use.
+
+    e.g.
+    to_field  field_desc        formula
+    HBW       HBW productions   hh1 * 1 + hh2 * 2
+
+    'to_field' is the name of the new field that is created.
+    'field_desc' is the field description of the new field.
+    'formula' is the expression that will be evaluated.
+*/
+
+Macro "Calculate Fields" (table, param_tbl)
+
+  // Argument checking
+  if table = null then Throw("'table' not provided")
+  {dir, path, name, ext} = SplitPath(table)
+  if ext <> ".bin" then Throw("'table' must be a .bin file")
+  if param_tbl = null then Throw("'param_tbl' not provided")
+  {dir, path, name, ext} = SplitPath(param_tbl)
+  if ext <> ".csv" then Throw("'param_tbl' must be a .csv file")
+
+  // Open the table
+  view = OpenTable("view", "FFB", {table})
+
+  // Open paramter table
+  params = CreateObject("df")
+  params.read_csv(param_tbl)
+  req_fields = {"to_field", "field_desc", "formula"}
+  colnames = params.colnames()
+  for req_field in req_fields do
+    if !params.in(req_field, colnames)
+      then Throw("Column '" + req_field + "' missing from 'param_tbl'")
+  end
+
+  for r = 1 to params.nrow() do
+    to_field = params.tbl.to_field[r]
+    field_desc = params.tbl.field_desc[r]
+    formula = params.tbl.formula[r]
+
+    // Verify expression (and get info about it)
+    {type, width} = VerifyExpression(view, formula)
+
+    // Create a new field and delete if it already exists. This prevents type
+    // problems from occuring when changing formulas during model development.
+    {field_names, field_specs} = GetFields(view, "All")
+    if params.in(to_field, field_names)
+      then RunMacro("Remove Field", view, to_field)
+    if type = "String" then do
+      type2 = "Character"
+      constant = null
+    end else do
+      type2 = type
+      constant = 0
+    end
+    a_fields = {{to_field, type2, width, 3, , , , field_desc}}
+    RunMacro("Add Fields", view, a_fields, constant)
+
+    // Create a temporary expression field
+    opts = null
+    opts.Type = type
+    opts.Width = width
+    exp_field = CreateExpression(view, "temp", formula, opts)
+
+    // Set expression result into permanent field and destroy expression field
+    v = GetDataVector(view + "|", "temp", )
+    SetDataVector(view + "|", to_field, v, )
+    DestroyExpression(view + "." + exp_field)
+  end
+
+  CloseView(view)
+EndMacro
+
+/*
 Similar to the crosswalk macro for fields, but for matrix cores.
 The destination matrix is always recreated from scratch.
 Each core is then added.
