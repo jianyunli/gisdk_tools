@@ -743,7 +743,7 @@ view
 a_fields
   Array of arrays
   Each sub-array contains the 12-elements that describe a field.
-  e.g. {"Density", "Real", 10, 3,,,,"Used to calculate initial AT"}
+  e.g. {"Density", "Real", 10, 3, , , , "Used to calculate initial AT"}
   (See ModifyTable() TC help page for full array info)
 
 initial_values
@@ -970,6 +970,8 @@ MacroOpts
 */
 
 Macro "Field Crosswalk" (MacroOpts)
+
+  Throw("Field Crosswalk is deprecated. Use 'Calculate Field' instead.")
 
   // Argument extraction
   tbl = MacroOpts.tbl
