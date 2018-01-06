@@ -72,10 +72,11 @@ Macro "HH Marginal Creation" (MacroOpts)
     tbl = OpenTable("tbl", "CSV", {tblFile})
     a_fieldnames = GetFields(tbl, "All")
     a_fieldnames = a_fieldnames[1]
+    slave_index = a_fieldnames[1]
     a_catnames = ExcludeArrayElements(a_fieldnames, 1, 1)
-    v_avg = GetDataVector(tbl + "|", "avg", )
-    big = ArrayMax(V2A(v_avg))
-    small = ArrayMin(V2A(v_avg))
+    v_idx = GetDataVector(tbl + "|", slave_index, )
+    big = ArrayMax(V2A(v_idx))
+    small = ArrayMin(V2A(v_idx))
     CloseView(tbl)
 
     // Before joining, delete any category fields that might exist
@@ -99,7 +100,7 @@ Macro "HH Marginal Creation" (MacroOpts)
 
 
     CloseView(se_tbl)
-    RunMacro("Perma Join", MacroOpts.se_bin, "mavg", tblFile, "avg")
+    RunMacro("Perma Join", MacroOpts.se_bin, "mavg", tblFile, slave_index)
     se_tbl = OpenTable("se", "FFB", {MacroOpts.se_bin})
     RunMacro("Remove Field", se_tbl, "mavg")
     RunMacro("Remove Field", se_tbl, "avg")
