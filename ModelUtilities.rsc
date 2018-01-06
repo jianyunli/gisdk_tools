@@ -1128,7 +1128,9 @@ This function uses a parameter table to calculate fields based on formulas.
 Inputs
   table
     String
-    Path to bin file where field will be added.
+    Either:
+      Path to bin/dbd file where field will be added.
+      Name of a view already open.
 
   param_tbl
     String
@@ -1147,14 +1149,30 @@ Macro "Calculate Fields" (table, param_tbl)
 
   // Argument checking
   if table = null then Throw("'table' not provided")
-  {dir, path, name, ext} = SplitPath(table)
-  if ext <> ".bin" then Throw("'table' must be a .bin file")
+  is_view = RunMacro("Is View?", table)
+  if is_view then do
+    {class, spec} = GetViewTableInfo(table)
+    if class <> "FFB" and class <> "DBASE"
+      then Throw("View 'table' must be from a BIN or DBD file to be modified")
+  end else do
+    {dir, path, name, ext} = SplitPath(table)
+    if Lower(ext) = ".bin" then is_bin = "true"
+    else if Lower(ext) = ".dbd" then is_dbd = "true"
+    else Throw("'table' must be either a BIN or DBD file to be modified")
+  end
   if param_tbl = null then Throw("'param_tbl' not provided")
   {dir, path, name, ext} = SplitPath(param_tbl)
   if ext <> ".csv" then Throw("'param_tbl' must be a .csv file")
 
   // Open the table
-  view = OpenTable("view", "FFB", {table})
+  if is_view then view = table
+  else if is_bin then view = OpenTable("view", "FFB", {table})
+  else if is_dbd then do
+    a_layers = GetDBLayers(table)
+    // TAZ DBDs have 1 layer, Link DBDs have two.
+    if a_layers.length = 1 then view = a_layers[1] else view = a_layers[2]
+    view = AddLayerToWorkspace(view, table, view)
+  end
 
   // Open paramter table
   params = CreateObject("df")
@@ -1201,7 +1219,8 @@ Macro "Calculate Fields" (table, param_tbl)
     DestroyExpression(view + "." + exp_field)
   end
 
-  CloseView(view)
+  if is_bin then CloseView(view)
+  else if is_dbd then DropLayerFromWorkspace(view)
 EndMacro
 
 /*
