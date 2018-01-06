@@ -601,11 +601,13 @@ Class "df" (tbl)
 
   Macro "read_bin" (file, fields) do
     // Check file and extension
+    if file = null then Throw("read_bin: 'file' not provided")
     if GetFileInfo(file) = null
-      then Throw("read_bin: file does not exist")
-    ext = ParseString(file, ".")
-    ext = ext[2]
-    if ext <> "bin" then Throw("read_bin: file not a .bin")
+      then Throw("read_bin: 'file'\n" + file + "\n" + "does not exist")
+    a_parts = ParseString(file, ".")
+    ext = a_parts[2]
+    if ext <> "bin"
+      then Throw("read_bin: 'file'" + file + "\n" + "is not a .bin")
 
     opts = null
     opts.view = OpenTable("view", "FFB", {file})
@@ -616,11 +618,13 @@ Class "df" (tbl)
 
   Macro "read_csv" (file, fields) do
     // Check file and extension
+    if file = null then Throw("read_csv: 'file' not provided")
     if GetFileInfo(file) = null
-      then Throw("read_csv: file does not exist")
+      then Throw("read_csv: 'file'\n" + file + "\n" + "does not exist")
     a_parts = ParseString(file, ".")
     ext = a_parts[2]
-    if ext <> "csv" then Throw("read_csv: file not a .csv")
+    if ext <> "csv"
+      then Throw("read_csv: 'file'" + file + "\n" + "is not a .csv")
 
     opts = null
     opts.view = OpenTable("view", "CSV", {file})
