@@ -1,29 +1,36 @@
 /*
-Takes aggregate zonal stats like total population and vehicles and creates
-distributions of households by individual sizes, number of vehicles, and
-number of workers.
+Takes aggregate zonal stats (e.g. average household size) and creates
+distributions of households by (e.g. 1-person, 2-person, etc).
 
 Input:
 MacroOpts
   Options Array
   Containing all arguments needed
 
-  MacroOpts.se_bin
+  se_bin
     String
     Full path to the scenario se BIN file
 
-  MacroOpts.hhField
+  hh_field
     String
-    Field name in the taz layer that has households
+    Field name in se_bin containing households.
 
-  MacroOpts.mtables
+  mtables
     Opts Array
     Links a field from the SE table to it's marginal table.
     For example:
-    mtables.HHPopulation = dir + "/disagg_hh_size.csv"
-    This links the hh_size.csv marginal table to the
-    "HHPopulation" field in the taz layer.
+    mtables.avg_size = dir + "/disagg_hh_size.csv"
+    This joins the hh_size.csv marginal table using the "avg_size" field in the
+    taz layer. The marginal csv tables should look like the following:
 
+    avg     siz1    siz2
+    1.0     1       0
+    1.1     .98     .02
+    etc
+
+    The first column can have any name. The remaining columns must match the
+    joint/seed table. In the example above, the joint/seed table must have a
+    column named "siz" with values of 1 and 2 in it.
 
 Output:
 Appends marginal distributions to the se table
@@ -35,16 +42,19 @@ ModelUtilities.rsc  "Perma Join"
 
 Macro "HH Marginal Creation" (MacroOpts)
 
-  // Check that the necessary fields are present in the se table
-  a_reqFields = {MacroOpts.hhField}
-  for t = 1 to MacroOpts.mtables.length do
-    a_reqFields = a_reqFields + {MacroOpts.mtables[t][1]}
-  end
+  // Argument extraction
+  se_bin = MacroOpts.se_bin
+  hh_field = MacroOpts.hh_field
+  mtables = MacroOpts.mtables
 
-  se_tbl = OpenTable("se", "FFB", {MacroOpts.se_bin})
+  // Check that the necessary fields are present in the se table
+  for t = 1 to mtables.length do
+    a_reqFields = a_reqFields + {mtables[t][1]}
+  end
+  se_tbl = OpenTable("se", "FFB", {se_bin})
   a_fields = GetFields(se_tbl, "All")
   a_fields = a_fields[1]
-  string = "The following fields are missing: "
+  string = "The following fields are missing from 'se_bin': "
   missing = "False"
   for i = 1 to a_reqFields.length do
     reqField = a_reqFields[i]
@@ -63,11 +73,11 @@ Macro "HH Marginal Creation" (MacroOpts)
   CloseView(se_tbl)
 
   // for each marginal table
-  for m = 1 to MacroOpts.mtables.length do
-    margName = MacroOpts.mtables[m][1]
-    tblFile = MacroOpts.mtables.(margName)
+  for m = 1 to mtables.length do
+    master_index = mtables[m][1]
+    tblFile = mtables.(master_index)
 
-    // Open table and get marginal category names.  Also get the max/min
+    // Open mtable and get marginal category names.  Also get the max/min
     // avg values included in the table.
     tbl = OpenTable("tbl", "CSV", {tblFile})
     a_fieldnames = GetFields(tbl, "All")
@@ -81,29 +91,20 @@ Macro "HH Marginal Creation" (MacroOpts)
 
     // Before joining, delete any category fields that might exist
     // from a previous run.
-    se_tbl = OpenTable("se", "FFB", {MacroOpts.se_bin})
+    se_tbl = OpenTable("se", "FFB", {se_bin})
     RunMacro("Remove Field", se_tbl, a_catnames)
 
-    // Calculate an average field in order to join the marginal table
-    // For example, if the current marginal is workers, calculate
-    // an average workers / household for each zone.  Also, cap the calculated
-    // average to the max/min included in the disagg table.
-    v_hh = GetDataVector(se_tbl + "|", MacroOpts.hhField, )
-    v_marg = GetDataVector(se_tbl + "|", margName, )
-    v_mavg = round(v_marg / v_hh, 2)
-    v_mavg = if (v_mavg = null) then 0 else v_mavg
-    v_mavg = min(v_mavg, big)
-    v_mavg = max(v_mavg, small)
-    a_fields = {{"mavg", "Real", 10, 2}}
-    RunMacro("TCB Add View Fields", {se_tbl, a_fields})
-    SetDataVector(se_tbl + "|", "mavg", v_mavg, )
-
-
+    // Make sure there are no null values in the master index field and cap them
+    // to the values of 'big' and 'small'. Also, get a vector of total
+    // households.
+    v = nz(GetDataVector(se_tbl + "|", master_index, ))
+    v = min(big, v)
+    v = max(small, v)
+    SetDataVector(se_tbl + "|", master_index, v, )
+    v_hh = nz(GetDataVector(se_tbl + "|", hh_field, ))
     CloseView(se_tbl)
-    RunMacro("Perma Join", MacroOpts.se_bin, "mavg", tblFile, slave_index)
-    se_tbl = OpenTable("se", "FFB", {MacroOpts.se_bin})
-    RunMacro("Remove Field", se_tbl, "mavg")
-    RunMacro("Remove Field", se_tbl, "avg")
+    RunMacro("Perma Join", se_bin, master_index, tblFile, slave_index)
+    se_tbl = OpenTable("se", "FFB", {se_bin})
 
     // Convert the category fields in the se table from percents
     // to households by multiplying by the household field.
@@ -114,9 +115,10 @@ Macro "HH Marginal Creation" (MacroOpts)
       v_hhs = v_pct * v_hh
       SetDataVector(se_tbl + "|", catname, v_hhs, )
     end
+
+    CloseView(se_tbl)
   end
 
-  CloseView(se_tbl)
 EndMacro
 
 
