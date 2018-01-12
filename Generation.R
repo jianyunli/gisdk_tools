@@ -11,8 +11,9 @@ library(tcadr)
 # by the model. Collect arguments passed.
 args <- commandArgs(trailingOnly = TRUE)
 se_bin <- args[1]
-seedTbl <- args[2]
-output_dir <- args[3]
+taz_field <- args[2]
+seedTbl <- args[3]
+output_dir <- args[4]
 
 # for testing
 # se_bin <- "/Users/kyleward/projects/NRV/repo/scenarios/Base_2016/outputs/sedata/ScenarioSE.bin"
@@ -32,9 +33,12 @@ se_tbl <- read_tcad(se_bin)
 # Change any NAs to zero
 se_tbl[is.na(se_tbl)] <- 0
 
+se_tbl <- se_tbl %>%
+  rename(geo_taz = !!taz_field)
+
 # Create a marginal table from se table
 margTbl <- se_tbl %>%
-  select(geo_taz = ID, one_of(marg_cats))
+  select(geo_taz, one_of(marg_cats))
 
 # Break the marginal table up into a list of data frames for ipf()
 targets <- list()

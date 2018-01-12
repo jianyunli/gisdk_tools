@@ -127,28 +127,93 @@ With marginals created in the se table, use R to create the joint distribution
 for each TAZ.
 
 Input:
-MacroOpts
-  MacroOpts.rscriptexe
-  MacroOpts.rscript
-  MacroOpts.se_bin
-  MacroOpts.Seed
-  MacroOpts.output_dir
+  MacroOpts
+    Named array that stores all macro arguments
+
+    rscriptexe
+      String
+      Path to the Rscript.exe file
+
+    rscript
+      String
+      Path to the Generation.R script to excute
+
+    se_bin
+      String
+      Path to the zonal/se bin file
+
+    taz_field
+      Optional string
+      Name of the field containing TAZ IDs. Defaults to "ID".
+
+    internal_query
+      Optional string
+      GISDK query that identifies which zones are internal. By default, the
+      query is assumed to be "InternalZone = 'Internal'".
+
+    seed_tbl
+      String
+      Path to seed table (csv)
+
+    output_dir
+      String
+      Path to the output folder where the output (HHDisaggregation.csv) will be
+      saved.
+
+Returns:
+  Writes out HHDisaggregation.csv.
 */
 Macro "HH Joint Distribution" (MacroOpts)
 
+  // Argument extraction
+  rscriptexe = MacroOpts.rscriptexe
+  rscript = MacroOpts.rscript
+  se_bin = MacroOpts.se_bin
+  taz_field = MacroOpts.taz_field
+  internal_query = MacroOpts.internal_query
+  Seed = MacroOpts.Seed
+  output_dir = MacroOpts.output_dir
+
+  if taz_field = null then taz_field = "ID"
+
+  // The R script requires a field named "InternalZone" with values of
+  // "Internal" identifying internal zones (where disagg is applied). Create
+  // that field if needed.
+  view = OpenTable("view", "FFB", {se_bin})
+  if internal_query <> null  then do
+    internal_query = RunMacro("Normalize Query", internal_query)
+    if internal_query <> "Select * where InternalZone = 'Internal'" then do
+      a_fields = {
+        {
+          "InternalZone", "Character", 10, 0, , , ,
+          "Identifies internal zones|Created by disagg model"
+        }
+      }
+      RunMacro("Add Fields", view, a_fields, )
+      SetView(view)
+      n = SelectByQuery("temp", "several", internal_query)
+      if n = 0
+        then Throw("query: '" + query + "' returned no internal zones")
+        else do
+          opts = null
+          opts.Constant = "Internal"
+          v = Vector(n, "String", opts)
+          SetDataVector(view + "|temp", "InternalZone", v, )
+        end
+      CloseView(view)
+    end
+  end
+
   // Delete R output if it exists
-  rCSV = MacroOpts.output_dir + "/HHDisaggregation.csv"
+  rCSV = output_dir + "/HHDisaggregation.csv"
   rDCC = Substitute(rCSV, ".csv", ".DCC",)
   if GetFileInfo(rCSV) <> null then DeleteFile(rCSV)
   if GetFileInfo(rDCC) <> null then DeleteFile(rDCC)
 
   // Prepare arguments for "Run R Script"
-  rscriptexe = MacroOpts.rscriptexe
-  rscript = MacroOpts.rscript
-  se_bin = MacroOpts.se_bin
-  seedTbl = MacroOpts.Seed
-  output_dir = MacroOpts.output_dir
-  OtherArgs = {se_bin, seedTbl, output_dir}
+  rscriptexe = rscriptexe
+  rscript = rscript
+  OtherArgs = {se_bin, taz_field, seed_tbl, output_dir}
   RunMacro("Run R Script", rscriptexe, rscript, OtherArgs)
 EndMacro
 
