@@ -1312,6 +1312,49 @@ Macro "Matrix Crosswalk" (MacroOpts)
 EndMacro
 
 /*
+Calculates matrix cores by reading formulas from a parameter file. All cores
+must be in the same matrix file, and the formula is applied to all cells.
+
+Inputs
+  MacroOpts
+    Named array containing all arguments for the function
+
+    mtx_file
+      String
+      Path to the base matrix
+
+    param_file
+      String
+      Path to the parameter csv file. e.g.:
+
+      to_core     formula
+      core_a      core_b + .25 * [core c]
+
+      *Note that spaces or other non-standard characters in a core name require
+      it to be surrounded in brackets.
+*/
+
+Macro "Calculate Cores" (MacroOpts)
+
+  mtx_file = MacroOpts.mtx_file
+  param_file = MacroOpts.param_file
+
+  params = CreateObject("df")
+  params.read_csv(param_file)
+
+  mtx = OpenMatrix(mtx_file, )
+
+  for r = 1 to params.nrow() do
+    to_core = params.tbl.to_core[r]
+    formula = params.tbl.formula[r]
+
+    RunMacro("Add Cores", mtx, to_core, {0})
+    cur = CreateMatrixCurrency(mtx, to_core, , , )
+    EvaluateMatrixExpression(cur, formula, , , )
+  end
+EndMacro
+
+/*
 Enhanced version of TCs AddMatrixCore(). If the core already exists,
 it is removed and then recreated instead of causing an error.
 
