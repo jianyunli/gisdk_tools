@@ -1252,6 +1252,8 @@ MacroOpts
 
 Macro "Matrix Crosswalk" (MacroOpts)
 
+  Throw("'Matrix Crosswalk' is deprecated. Use 'Calculate Cores' instead.")
+
   from_mtx = MacroOpts.from_mtx
   to_mtx = MacroOpts.to_mtx
   equiv_tbl = MacroOpts.equiv_tbl
