@@ -920,7 +920,10 @@ EndMacro
 
 /*
 Many steps in the model boil down to simply aggregating/disaggregating
-fields - applying a factor during the process.
+fields - sometimes applying a factor during the process. This macro allows
+this to be done with a parameter file.
+
+Note: if a more-complex formula is needed, see "Calculate Fields".
 
 MacroOpts
   Options array
@@ -970,8 +973,6 @@ MacroOpts
 */
 
 Macro "Field Crosswalk" (MacroOpts)
-
-  Throw("Field Crosswalk is deprecated. Use 'Calculate Field' instead.")
 
   // Argument extraction
   tbl = MacroOpts.tbl
@@ -1125,6 +1126,8 @@ EndMacro
 /*
 This function uses a parameter table to calculate fields based on formulas.
 
+Note: if simply combining fields (with optional factors), see "Field Crosswalk".
+
 Inputs
   table
     String
@@ -1228,6 +1231,8 @@ Similar to the crosswalk macro for fields, but for matrix cores.
 The destination matrix is always recreated from scratch.
 Each core is then added.
 
+Note: if a more-complex formula is needed, see "Calculate Cores".
+
 MacroOpts
   Named array of function arguments
 
@@ -1251,8 +1256,6 @@ MacroOpts
 */
 
 Macro "Matrix Crosswalk" (MacroOpts)
-
-  Throw("'Matrix Crosswalk' is deprecated. Use 'Calculate Cores' instead.")
 
   from_mtx = MacroOpts.from_mtx
   to_mtx = MacroOpts.to_mtx
@@ -1314,6 +1317,8 @@ EndMacro
 /*
 Calculates matrix cores by reading formulas from a parameter file. All cores
 must be in the same matrix file, and the formula is applied to all cells.
+
+Note: if just combining cores (with optional factors) see "Matrix Crosswalk".
 
 Inputs
   MacroOpts
