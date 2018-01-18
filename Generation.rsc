@@ -171,7 +171,7 @@ Macro "HH Joint Distribution" (MacroOpts)
   se_bin = MacroOpts.se_bin
   taz_field = MacroOpts.taz_field
   internal_query = MacroOpts.internal_query
-  Seed = MacroOpts.Seed
+  seed_tbl = MacroOpts.seed_tbl
   output_dir = MacroOpts.output_dir
 
   if taz_field = null then taz_field = "ID"
