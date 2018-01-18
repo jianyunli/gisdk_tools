@@ -179,8 +179,8 @@ Macro "HH Joint Distribution" (MacroOpts)
   // The R script requires a field named "InternalZone" with values of
   // "Internal" identifying internal zones (where disagg is applied). Create
   // that field if needed.
-  view = OpenTable("view", "FFB", {se_bin})
   if internal_query <> null  then do
+    view = OpenTable("view", "FFB", {se_bin})
     internal_query = RunMacro("Normalize Query", internal_query)
     if internal_query <> "Select * where InternalZone = 'Internal'" then do
       a_fields = {

@@ -52,7 +52,7 @@ for (name in margNames) {
 # repeat the seed table for each TAZ
 tazs <- se_tbl %>%
   filter(InternalZone == "Internal") %>%
-  .$ID
+  .$geo_taz
 seed_long <- merge(tazs, seedTbl) %>%
   dplyr::rename(geo_taz = x) %>%
   dplyr::arrange(geo_taz) %>%
