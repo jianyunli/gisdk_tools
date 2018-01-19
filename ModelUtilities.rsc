@@ -1140,13 +1140,16 @@ Inputs
     Path to csv paramter table that contains formulas to use.
 
     e.g.
-    to_field  field_desc        formula            field_sum
-    HBW       HBW productions   hh1 * 1 + hh2 * 2  1
+    to_field  field_desc        formula            aggregation
+    HBW       HBW productions   hh1 * 1 + hh2 * 2  null
 
     'to_field' is the name of the new field that is created.
     'field_desc' is the field description of the new field.
     'formula' is the expression that will be evaluated.
-    'field_sum' is a flag that will sum a single field if listed in formula.
+    'aggregation' is an optional field. If it is "Sum", each row of the final
+      field will have the total of the formula. The allowable aggregation values
+      are the same as those accepted by VectorStatistic(). Most common are
+      "Sum", "Min", "Max", and "Mean"
 */
 
 Macro "Calculate Fields" (table, param_tbl)
@@ -1181,7 +1184,7 @@ Macro "Calculate Fields" (table, param_tbl)
   // Open paramter table
   params = CreateObject("df")
   params.read_csv(param_tbl)
-  req_fields = {"to_field", "field_desc", "formula", "field_sum"}
+  req_fields = {"to_field", "field_desc", "formula", "aggregation"}
   colnames = params.colnames()
   for req_field in req_fields do
     if !params.in(req_field, colnames)
@@ -1192,7 +1195,7 @@ Macro "Calculate Fields" (table, param_tbl)
     to_field = params.tbl.to_field[r]
     field_desc = params.tbl.field_desc[r]
     formula = params.tbl.formula[r]
-    field_sum = params.tbl.field_sum[r]
+    aggregation = params.tbl.aggregation[r]
 
     // Verify expression (and get info about it)
     {type, width} = VerifyExpression(view, formula)
@@ -1211,19 +1214,6 @@ Macro "Calculate Fields" (table, param_tbl)
     end
     a_fields = {{to_field, type2, width, 3, , , , field_desc}}
 
-    // check if field_sum requested and set constant = sum of formula field
-    // only works for a single field in the formula
-    if field_sum = 1 then do
-      a_parts = ParseString(formula, " +-/*^")
-      if a_parts.length > 1
-        then Throw(
-          "If field_sum = 1 in param table, formula must be single field."
-        )
-      constant = VectorStatistic(GetDataVector(view+"|", formula, ), "Sum", )
-      RunMacro("Add Fields", view, a_fields, constant)
-      continue
-    end
-
     RunMacro("Add Fields", view, a_fields, constant)
 
     // Create a temporary expression field
@@ -1232,8 +1222,17 @@ Macro "Calculate Fields" (table, param_tbl)
     opts.Width = width
     exp_field = CreateExpression(view, "temp", formula, opts)
 
-    // Set expression result into permanent field and destroy expression field
     v = GetDataVector(view + "|", "temp", )
+
+    // If an aggregation was provided, summarize the entire vector
+    if aggregation <> null then do
+      constant = VectorStatistic(v, aggregation, )
+      opts = null
+      opts.Constant = constant
+      v = Vector(length, type2, opts)
+    end
+
+    // Set expression result into permanent field and destroy expression field
     SetDataVector(view + "|", to_field, v, )
     DestroyExpression(view + "." + exp_field)
   end
