@@ -1213,7 +1213,12 @@ Macro "Calculate Fields" (table, param_tbl)
 
     // check if field_sum requested and set constant = sum of formula field
     // only works for a single field in the formula
-    if field_sum = 1 then do 
+    if field_sum = 1 then do
+      a_parts = ParseString(formula, " +-/*^")
+      if a_parts.length > 1
+        then Throw(
+          "If field_sum = 1 in param table, formula must be single field."
+        )
       constant = VectorStatistic(GetDataVector(view+"|", formula, ), "Sum", )
       RunMacro("Add Fields", view, a_fields, constant)
       continue
