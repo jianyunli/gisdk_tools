@@ -1739,3 +1739,36 @@ Macro "Delete Directory" (dir)
   end
   RemoveDirectory(dir)
 EndMacro
+
+/*
+Replaces variables in 'string' (identified with curly brackets) with values
+from 'vars'.
+
+Inputs
+  string
+    String
+    String to resolve. Variables are surrounded in {}.
+
+  vars
+    Named array
+    Named values in 'vars' will replace the names found in 'string'
+
+Example:
+  string = "{scen_dir}/outputs/networks/{period}net.net"
+  vars.scen_dir = "Y:\\repo/scenarios/Base_2016"
+  vars.period = "AM"
+  result = RunMacro("Resolve String", string, vars)
+  // result = "Y:\\repo/scenarios/Base_2016/outputs/networks/AMnet.net"
+*/
+
+Macro "Resolve String" (string, vars)
+  opts.[Include Empty] = "true"
+  a_parts = ParseString(string, "{}")
+  for part in a_parts do
+    if vars.(part) <> null
+      then result = result + vars.(part)
+      else result = result + part
+  end
+
+  return(string)
+EndMacro
