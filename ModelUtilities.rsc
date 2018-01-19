@@ -1229,7 +1229,7 @@ Macro "Calculate Fields" (table, param_tbl)
       constant = VectorStatistic(v, aggregation, )
       opts = null
       opts.Constant = constant
-      v = Vector(length, type2, opts)
+      v = Vector(v.length, type2, opts)
     end
 
     // Set expression result into permanent field and destroy expression field
