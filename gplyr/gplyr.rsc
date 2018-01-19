@@ -272,20 +272,20 @@ Class "df" (tbl)
   EndItem
 
   /*
-  Returns number of columns
+  Returns number of columns or 0 if the table is empty
   */
 
   Macro "ncol" do
-    if self.is_empty() then return()
+    if self.is_empty() then return(0)
     return(self.tbl.length)
   EndItem
 
   /*
-  Returns number of rows
+  Returns number of rows or 0 if the table is empty
   */
 
   Macro "nrow" do
-    if self.is_empty() then return()
+    if self.is_empty() then return(0)
     return(self.tbl[1][2].length)
   EndItem
 
@@ -1120,8 +1120,9 @@ Class "df" (tbl)
 
   query
     String
-    Valid TransCAD query (e.g. "ID = 5" or "Name = 'Sam'")
-    Do not include "Select * where" in the query string
+    Valid TransCAD query (e.g. "ID = 5" or "Name <> 'Sam'")
+    You do not have to include "Select * where" in the query string, but doing
+    so will not cause an error.
   */
 
   Macro "filter" (query) do
