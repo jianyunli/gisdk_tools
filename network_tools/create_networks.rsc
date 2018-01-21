@@ -203,12 +203,14 @@ Macro "Create Highway Network" (MacroOpts)
   // Create array of link fields to include
   for r = 1 to link_fields.nrow() do
     field_name = link_fields.tbl.net_field_name[r]
-    ab_spec = RunMacro(
-      "Normalize Expression", link_fields.tbl.ab_field_spec[r], expr_vars
+    ab_name = RunMacro(
+      "Normalize Expression", link_fields.tbl.ab_field_name[r], expr_vars
     )
-    ba_spec = RunMacro(
-      "Normalize Expression", link_fields.tbl.ba_field_spec[r], expr_vars
+    ab_spec = llyr + "." + ab_name
+    ba_name = RunMacro(
+      "Normalize Expression", link_fields.tbl.ba_field_name[r], expr_vars
     )
+    ba_spec = llyr + "." + ba_name
 
     a_link_fields = a_link_fields + {
       {field_name, {ab_spec, ba_spec, , , "False"}}
@@ -218,8 +220,14 @@ Macro "Create Highway Network" (MacroOpts)
   // Create an array of node fields to include
   for r = 1 to node_fields.nrow() do
     field_name = node_fields.tbl.net_field_name[r]
-    ab_spec = node_fields.tbl.ab_field_spec[r]
-    ba_spec = node_fields.tbl.ba_field_spec[r]
+    ab_name = RunMacro(
+      "Normalize Expression", node_fields.tbl.ab_field_name[r], expr_vars
+    )
+    ab_spec = nlyr + "." + ab_name
+    ba_name = RunMacro(
+      "Normalize Expression", node_fields.tbl.ba_field_name[r], expr_vars
+    )
+    ba_spec = nlyr + "." + ba_name
 
     a_node_fields = a_node_fields + {
       {field_name, {ab_spec, ba_spec, , , "False"}}
