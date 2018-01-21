@@ -1516,6 +1516,39 @@ Macro "Normalize Query" (query)
 EndMacro
 
 /*
+Replaces variables in 'expr' (identified with curly brackets) with values
+from 'vars'.
+
+Inputs
+  expr
+    String
+    Expression to resolve. Variables are surrounded in {}.
+
+  vars
+    Named array
+    Named values in 'vars' will replace the names found in 'expr'
+
+Example:
+  expr = "{scen_dir}/outputs/networks/{period}net.net"
+  vars.scen_dir = "Y:\\repo/scenarios/Base_2016"
+  vars.period = "AM"
+  result = RunMacro("Resolve Expression", expr, vars)
+  // result = "Y:\\repo/scenarios/Base_2016/outputs/networks/AMnet.net"
+*/
+
+Macro "Normalize Expression" (expr, vars)
+  opts.[Include Empty] = "true"
+  a_parts = ParseString(expr, "{}")
+  for part in a_parts do
+    if vars.(part) <> null
+      then result = result + vars.(part)
+      else result = result + part
+  end
+
+  return(result)
+EndMacro
+
+/*
 Macro to simplify the process of map creation.
 
 Inputs
@@ -1753,37 +1786,4 @@ Macro "Delete Directory" (dir)
     end
   end
   RemoveDirectory(dir)
-EndMacro
-
-/*
-Replaces variables in 'string' (identified with curly brackets) with values
-from 'vars'.
-
-Inputs
-  string
-    String
-    String to resolve. Variables are surrounded in {}.
-
-  vars
-    Named array
-    Named values in 'vars' will replace the names found in 'string'
-
-Example:
-  string = "{scen_dir}/outputs/networks/{period}net.net"
-  vars.scen_dir = "Y:\\repo/scenarios/Base_2016"
-  vars.period = "AM"
-  result = RunMacro("Resolve String", string, vars)
-  // result = "Y:\\repo/scenarios/Base_2016/outputs/networks/AMnet.net"
-*/
-
-Macro "Resolve String" (string, vars)
-  opts.[Include Empty] = "true"
-  a_parts = ParseString(string, "{}")
-  for part in a_parts do
-    if vars.(part) <> null
-      then result = result + vars.(part)
-      else result = result + part
-  end
-
-  return(string)
 EndMacro
