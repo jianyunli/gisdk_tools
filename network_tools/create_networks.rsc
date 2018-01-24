@@ -245,20 +245,26 @@ Macro "Create Highway Network" (MacroOpts)
   // Network Settings
   SetNetworkInformationItem(nh, "Length Unit", {settings.distance_units})
   SetNetworkInformationItem(nh, "Time Unit", {settings.time_units})
+
+
   opts = null
   if settings.link_type_settings <> null then do
     opts.[Use Link Types] = "true"
     opts.[Link Type Settings] = settings.link_type_settings
   end
-  opts.[Use Turn Penalties] = settings.use_turn_penalties
-  opts.[Turn Settings] = {
-    settings.left_tp,
-    settings.right_tp,
-    settings.straight_tp,
-    settings.uturn_tp,
-    settings.spec_pen_file,
-    settings.def_pen_file
-  }
+  if settings.use_turn_penalties then do
+    RunMacro("Load Turn Movements", nh, settings)
+    
+    opts.[Use Turn Penalties] = settings.use_turn_penalties
+    opts.[Turn Settings] = {
+      settings.left_tp,
+      settings.right_tp,
+      settings.straight_tp,
+      settings.uturn_tp,
+      settings.spec_pen_file,
+      settings.def_pen_file
+    }
+  end
   if settings.centroid_query <> null then do
     opts.[Use Centroids] = "true"
     SetLayer(nlyr)
@@ -290,4 +296,39 @@ Macro "Create Highway Network" (MacroOpts)
     opts.[Park and Drive Query] = pnr_set
   end
   ChangeNetworkSettings(nh, opts)
+EndMacro
+
+/*
+Helper macro for "Create Highway Network"
+*/
+
+Macro "Load Turn Movements" (nh, settings)
+
+  topts = null
+  turn_opts.[Global Penalties].Left = settings.left_tp
+  turn_opts.[Global Penalties].Right = settings.right_tp
+  turn_opts.[Global Penalties].Straight = settings.straight_tp
+  turn_opts.[Global Penalties].Uturn = settings.uturn_tp
+  if settings.def_pen_file <> null then do
+    def_view = OpenTable("def_view", "FFB", {settings.spec_pen_file})
+    req_fields = {
+      "from_id", "to_id", "left_cost", "right_cost", "straight_cost",
+      "uturn_cost", "link_type"
+    }
+    RunMacro(
+      "Check View for Required Fields", def_view,
+      req_fields
+    )
+    turn_opts.[Specific Penalties] = {def_view} + req_fields
+  end
+  if settings.spec_pen_file <> null then do
+    spec_view = OpenTable("spec_view", "FFB", {settings.spec_pen_file})
+    req_fields = {"from_id", "to_id", "cost"}
+    RunMacro(
+      "Check View for Required Fields", spec_view,
+      req_fields
+    )
+    turn_opts.[Specific Penalties] = {spec_view} + req_fields
+  end
+  LoadNetworkMovementTable(nh, turn_opts)
 EndMacro
