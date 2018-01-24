@@ -1787,3 +1787,42 @@ Macro "Delete Directory" (dir)
   end
   RemoveDirectory(dir)
 EndMacro
+
+/*
+Checks a table/view for required fields. Displays which fields, if any, are
+missing.
+
+Inputs
+
+  tbl
+    String
+    View name or path to bin/csv file.
+
+  req_fields
+    Array of strings
+    Field names of field that 'tbl' must contain.
+
+Returns
+  Nothing
+  If any fields are missing, an error message will list their names.
+*/
+
+Macro "Check View for Required Fields" (tbl, req_fields)
+
+  if !RunMacro("Is View?", tbl) then do
+    {drive, folder, name, ext} = SplitPath(tbl)
+    if Lower(ext) = ".bin" then tbl = OpenTable("view", "FFB", {tbl})
+    else if Lower(ext) = ".csv" then tbl = OpenTable("view", "CSV", {tbl})
+    else Throw("Only .bin and .csv files are supported.")
+  end
+
+  {names, specs} = GetFields(tbl, "All")
+
+  for field in req_fields do
+    if ArrayPosition(names, {field}, ) = 0 then missing = missing + " " + field
+  end
+
+  if missing <> null then Throw(
+    "The following fields are missing from '" + tbl + "': " + missing
+  )
+EndMacro
