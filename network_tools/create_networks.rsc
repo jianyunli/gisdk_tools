@@ -195,143 +195,113 @@ Macro "Create Highway Network" (MacroOpts)
   SetLayer(llyr)
 
   // Set u-turn and through movement angles.
+  // The default is:
   // U-turn: 10 degrees; Through: 30 degrees
-  // These are the default TCv6 values, but this step ensures
-  // model consistency even if a specific user has changed these values.
   // This function is undocumented.
+  if settings.through_degrees = null then settings.through_degrees = 30
+  if settings.uturn_degrees = null then settings.uturn_degrees = 10
   SetTurnMovementTolerances(
     R2I(settings.uturn_degrees),
     R2I(settings.through_degrees)
   )
 
-  // Create a link set if query is provided
+  // The following batch macro is documented in TC GISDK help. Type in
+  // "Networks" into the help index and then select "Batch Mode".
+  opts = null
+  opts.Input.[Link Set] = {hwy_dbd + "|" + llyr, llyr}
   if settings.link_query <> null then do
-    SetLayer(llyr)
-    set_name = CreateSet("link set")
-    n = SelectByQuery(set_name, "several", settings.link_query)
+    opts.Input.[Link Set] = opts.Input.[Link Set] + {
+      "link_set",
+      RunMacro("Normalize Query", settings.link_query)
+    }
   end
-
+  opts.Global.[Network Label] = label
+  opts.Global.[Network Options].[Turn Penalties] = "Yes"
+  opts.Global.[Network Options].[Keep Duplicate Links] = "FALSE"
+  opts.Global.[Network Options].[Ignore Link Direction] = "FALSE"
+  opts.Global.[Network Options].[Time Units] = settings.time_units
   // Create array of link fields to include
   for r = 1 to link_fields.nrow() do
     field_name = link_fields.tbl.net_field_name[r]
-    ab_name = link_fields.tbl.ab_field_name[r]
-    ab_spec = llyr + "." + ab_name
-    ba_name = link_fields.tbl.ba_field_name[r]
-    ba_spec = llyr + "." + ba_name
-
-    a_link_fields = a_link_fields + {
-      {field_name, {ab_spec, ba_spec, , , "False"}}
-    }
+    ab_spec = llyr + "." + link_fields.tbl.ab_field_name[r]
+    ba_spec = llyr + "." + link_fields.tbl.ba_field_name[r]
+    opts.Global.[Link Options].(field_name) = {ab_spec, ba_spec, , , "False"}
   end
-
   // Create an array of node fields to include
   for r = 1 to node_fields.nrow() do
     field_name = node_fields.tbl.net_field_name[r]
-    ab_name = node_fields.tbl.ab_field_name
-    ab_spec = nlyr + "." + ab_name
-    ba_name = node_fields.tbl.ba_field_name[r]
-    ba_spec = nlyr + "." + ba_name
-
-    a_node_fields = a_node_fields + {
-      {field_name, {ab_spec, ba_spec, , , "False"}}
-    }
+    ab_spec = nlyr + "." + node_fields.tbl.ab_field_name
+    ba_spec = nlyr + "." + node_fields.tbl.ba_field_name[r]
+    opts.Global.[Node Options].(field_name) = {ab_spec, ba_spec, , , "False"}
   end
+  opts.Global.[Length Units] = settings.distance_units
+  opts.Output.[Network File] = out_file
+  ok = RunMacro("TCB Run Operation", "Build Highway Network", opts, &Ret)
+  if !ok then Throw("Highway network creation failed")
+
+  // Add llyr and nlyr back (the batch macro closes them)
+  llyr = AddLayerToWorkspace(llyr, hwy_dbd, llyr)
+  nlyr = AddLayerToWorkspace(nlyr, hwy_dbd, nlyr)
+
+  // The code below calls the TransCAD batch macro to apply network settings.
+  // This macro is documented in the help. In the GISDK help index, type
+  // "settings" and then choose "Highway Networks".
 
   opts = null
-  opts.[Link ID] = llyr + ".ID"
-  opts.[Node ID] = nlyr + ".ID"
-  opts.[Turn Penalties] = if settings.use_turn_penalties
-    then "Yes"
-    else "No"
-  nh = CreateNetwork(set_name, out_file, label, a_link_fields, a_node_fields, opts)
-
-  // Network Settings
-  SetNetworkInformationItem(nh, "Length Unit", {settings.distance_units})
-  SetNetworkInformationItem(nh, "Time Unit", {settings.time_units})
-
-
-  opts = null
-  if settings.link_type_settings <> null then do
-    opts.[Use Link Types] = "true"
-    opts.[Link Type Settings] = settings.link_type_settings
-  end
-  if settings.use_turn_penalties then do
-    RunMacro("Load Turn Movements", nh, settings)
-    
-    opts.[Use Turn Penalties] = settings.use_turn_penalties
-    opts.[Turn Settings] = {
-      settings.left_tp,
-      settings.right_tp,
-      settings.straight_tp,
-      settings.uturn_tp,
-      settings.spec_pen_file,
-      settings.def_pen_file
-    }
-  end
+  opts.Input.Database = hwy_dbd
+  opts.Input.Network = out_file
+  opts.Input.[Def Turn Pen Table] = settings.def_pen_file
+  opts.Input.[Spec Turn Pen Table] = settings.spec_pen_file
   if settings.centroid_query <> null then do
-    opts.[Use Centroids] = "true"
     SetLayer(nlyr)
-    centroid_set = CreateSet("centroids")
+    centroid_set = CreateSet("centroid_set")
     centroid_query = RunMacro("Normalize Query", settings.centroid_query)
-    n = SelectByQuery(centroid_set, "Several", centroid_query)
+    n = SelectByQuery(centroid_set, "several", centroid_query)
     if n = 0
       then Throw("No centroids found using '" + settings.centroid_query + "'")
-    opts.[Centroids Set] = centroid_set
+    opts.Input.[Centroids Set] = {hwy_dbd + "|" + nlyr, nlyr, centroid_set, centroid_query}
   end
-  if settings.drive_link_query <> null then do
+  if settings.od_toll_query <> null then do
     SetLayer(llyr)
-    dl_set = CreateSet("drive link set")
-    n = SelectByQuery(dl_set, "several", settings.drive_link_query)
-    if n = 0 then Throw(
-      "No drive-to-PNR links found using query '" +
-      settings.drive_link_query + "'"
-    )
-    opts.[Drive Link Set] = dl_set
+    od_toll_set = CreateSet("od_toll_set")
+    od_toll_query = RunMacro("Normalize Query", settings.od_toll_query)
+    n = SelectByQuery(od_toll_set, "several", od_toll_query)
+    if n = 0
+      then Throw("No OD toll links found using '" + settings.od_toll_query + "'")
+    opts.Input.[OD Toll Set] = od_toll_set
   end
-  if settings.park_and_ride_query <> null then do
-    SetLayer(nlyr)
-    pnr_set = CreateSet("park and ride")
-    n = SelectByQuery(pnr_set, "several", settings.park_and_ride_query)
-    if n = 0 then Throw(
-      "No PNR nodes found using query '" +
-      settings.park_and_ride_query + "'"
-    )
-    opts.[Park and Drive Query] = pnr_set
+  if settings.toll_query <> null then do
+    SetLayer(llyr)
+    toll_set = CreateSet("toll_set")
+    toll_query = RunMacro("Normalize Query", settings.toll_query)
+    n = SelectByQuery(toll_set, "several", toll_query)
+    if n = 0
+      then Throw("No fixed toll links found using '" + settings.toll_query + "'")
+    opts.Input.[Toll Set] = toll_set
   end
-  ChangeNetworkSettings(nh, opts)
-EndMacro
+  Opts.Global.[Link to Link Penalty Method] = "Table"
+  opts.Global.[Global Turn Penalties] = {
+    settings.left_tp,
+    settings.right_tp,
+    settings.straight_tp,
+    settings.uturn_tp
+  }
+  if (settings.xfer_pen_field <> null and settings.xfer_line_type_field = null) or
+    (settings.xfer_pen_field = null and settings.xfer_line_type_field <> null)
+    then Throw(
+      "Both 'xfer_pen_field' and 'xfer_line_type_field' must be provided\n" +
+      "if either is."
+    )
+  if settings.xfer_pen_field <> null then do
+    if settings.def_pen_file <> null or settings.spec_pen_file <> null
+      then Throw(
+        "A transfer penalty field on the link layer cannot be used with a turn penalty table. Remove one or the other."
+      )
+    opts.Field.[Line ID] = settings.xfer_line_type_field
+    opts.Field.[Xfer Pen] = settings.xfer_pen_field
+  end
+  ok = RunMacro("TCB Run Operation", "Network Settings", opts, &Ret)
+  if !ok then Throw("Highway network settings failed")
 
-/*
-Helper macro for "Create Highway Network"
-*/
-
-Macro "Load Turn Movements" (nh, settings)
-
-  topts = null
-  turn_opts.[Global Penalties].Left = settings.left_tp
-  turn_opts.[Global Penalties].Right = settings.right_tp
-  turn_opts.[Global Penalties].Straight = settings.straight_tp
-  turn_opts.[Global Penalties].Uturn = settings.uturn_tp
-  if settings.def_pen_file <> null then do
-    def_view = OpenTable("def_view", "FFB", {settings.spec_pen_file})
-    req_fields = {
-      "from_id", "to_id", "left_cost", "right_cost", "straight_cost",
-      "uturn_cost", "link_type"
-    }
-    RunMacro(
-      "Check View for Required Fields", def_view,
-      req_fields
-    )
-    turn_opts.[Specific Penalties] = {def_view} + req_fields
-  end
-  if settings.spec_pen_file <> null then do
-    spec_view = OpenTable("spec_view", "FFB", {settings.spec_pen_file})
-    req_fields = {"from_id", "to_id", "cost"}
-    RunMacro(
-      "Check View for Required Fields", spec_view,
-      req_fields
-    )
-    turn_opts.[Specific Penalties] = {spec_view} + req_fields
-  end
-  LoadNetworkMovementTable(nh, turn_opts)
+  RunMacro("Close All")
 EndMacro
