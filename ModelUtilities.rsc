@@ -204,7 +204,9 @@ Macro "Read Parameter File" (parameterFile, expr_vars, incDescr)
     )
 
   // Normalize any {variables} found in v_values
-  a_value = RunMacro("Normalize Expression", v_value, expr_vars)
+  if expr_vars <> null
+   then a_value = RunMacro("Normalize Expression", v_value, expr_vars)
+   else a_value = V2A(v_value)
 
   // Loop over each row of the parameter table
   for i = 1 to a_dVecs[1].length do
