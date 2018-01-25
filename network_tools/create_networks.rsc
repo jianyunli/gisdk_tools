@@ -172,6 +172,17 @@ Macro "Create Highway Network" (MacroOpts)
   settings = RunMacro("Read Parameter File", settings_tbl)
   fields = CreateObject("df")
   fields.read_csv(fields_tbl)
+  // Normalize any expressions/variables found in the fields table
+  if expr_vars <> null then do
+    fields.mutate(
+      "ab_field_name",
+      RunMacro("Normalize Expression", fields.tbl.ab_field_name, expr_vars)
+    )
+    fields.mutate(
+      "ba_field_name",
+      RunMacro("Normalize Expression", fields.tbl.ba_field_name, expr_vars)
+    )
+  end
   link_fields = fields.copy()
   link_fields.filter("layer = 'link'")
   node_fields = fields.copy()
@@ -203,13 +214,9 @@ Macro "Create Highway Network" (MacroOpts)
   // Create array of link fields to include
   for r = 1 to link_fields.nrow() do
     field_name = link_fields.tbl.net_field_name[r]
-    ab_name = RunMacro(
-      "Normalize Expression", link_fields.tbl.ab_field_name[r], expr_vars
-    )
+    ab_name = link_fields.tbl.ab_field_name[r]
     ab_spec = llyr + "." + ab_name
-    ba_name = RunMacro(
-      "Normalize Expression", link_fields.tbl.ba_field_name[r], expr_vars
-    )
+    ba_name = link_fields.tbl.ba_field_name[r]
     ba_spec = llyr + "." + ba_name
 
     a_link_fields = a_link_fields + {
@@ -220,13 +227,9 @@ Macro "Create Highway Network" (MacroOpts)
   // Create an array of node fields to include
   for r = 1 to node_fields.nrow() do
     field_name = node_fields.tbl.net_field_name[r]
-    ab_name = RunMacro(
-      "Normalize Expression", node_fields.tbl.ab_field_name[r], expr_vars
-    )
+    ab_name = node_fields.tbl.ab_field_name
     ab_spec = nlyr + "." + ab_name
-    ba_name = RunMacro(
-      "Normalize Expression", node_fields.tbl.ba_field_name[r], expr_vars
-    )
+    ba_name = node_fields.tbl.ba_field_name[r]
     ba_spec = nlyr + "." + ba_name
 
     a_node_fields = a_node_fields + {
