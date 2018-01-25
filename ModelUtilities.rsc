@@ -155,6 +155,12 @@ parameterFile:  Must meet the following criteria:
     - Value
     - Description
 
+expr_vars
+  Optional named array
+  The parameter values can contain variables in them designated with curly
+  brackets (e.g. {period}). Those variables will do a lookup against those found
+  in expr_vars. See "Normalize Expression" macro for more details.
+
 incDescr:   Boolean   "Include Description"
                       Whether or not the description will be included.
                       For reading and writing to settings csv files, this should
@@ -166,7 +172,7 @@ Output:
 Settings    Array     Options array that holds all parameters
 */
 
-Macro "Read Parameter File" (parameterFile, incDescr)
+Macro "Read Parameter File" (parameterFile, expr_vars, incDescr)
 
   // Set default value of optional variables
   if incDescr = null then incDescr = "False"
@@ -184,7 +190,6 @@ Macro "Read Parameter File" (parameterFile, incDescr)
   dimensions = value_pos - 1
   a_dFields = SubArray(a_fieldnames, 1, dimensions)
   a_vFields = {"Value", "Description"}
-
   // Get data vectors
   a_dVecs = GetDataVectors(tbl + "|", a_dFields, )
   {v_value, v_desc} = GetDataVectors(tbl + "|", a_vFields, )
@@ -198,15 +203,16 @@ Macro "Read Parameter File" (parameterFile, incDescr)
     parameterFile
     )
 
+  // Normalize any {variables} found in v_values
+  a_value = RunMacro("Normalize Expression", v_value, expr_vars)
+
   // Loop over each row of the parameter table
   for i = 1 to a_dVecs[1].length do
     a_path = null
-    value = v_value[i]
+    value = a_value[i]
     desc = v_desc[i]
 
-    // If the value array is mixed strings and numerics, all will
-    // be converted to strings.  Correct that here.
-    // Convert any string-number into a number
+    // Convert any string-number into a number (e.g. "152")
     if TypeOf(value) = "string" then do
       value = if value = "0"
         then 0

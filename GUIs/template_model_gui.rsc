@@ -495,7 +495,7 @@ dBox "Scenario Settings" location: x, y Title: "Scenario Settings"
     // If config file doesn't exist, toggle writing out to file
     write_settings = "False"
     if settings then do
-      Settings = RunMacro("Read Parameter File", settings_file, "True")
+      Settings = RunMacro("Read Parameter File", settings_file, , "True")
       Backup = CopyArray(Settings)
       // create a string of the ext_awdt_year for display
       string.ext_awdt_year = String(Settings.ext_awdt_year.value)
