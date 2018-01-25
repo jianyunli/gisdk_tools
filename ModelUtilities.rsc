@@ -1554,6 +1554,7 @@ Macro "Normalize Expression" (expr, vars)
     else if TypeOf(expr) = "vector" then V2A(expr)
   if TypeOf(expr) <> "array"
     then Throw("'expr' must be a string, array or vector")
+  if vars = null then Throw("'vars' not provided")
 
   for e in expr do
     new_e = null
