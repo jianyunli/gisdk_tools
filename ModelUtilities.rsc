@@ -1521,12 +1521,17 @@ from 'vars'.
 
 Inputs
   expr
-    String
-    Expression to resolve. Variables are surrounded in {}.
+    String or array/vector of values
+    Expression(s) to resolve. Variables are surrounded in {}. Numerical values
+    are left as is.
 
   vars
     Named array
     Named values in 'vars' will replace the names found in 'expr'
+
+Returns
+  result
+    An array where any {variables} are replaced.
 
 Example:
   expr = "{scen_dir}/outputs/networks/{period}net.net"
@@ -1537,12 +1542,25 @@ Example:
 */
 
 Macro "Normalize Expression" (expr, vars)
-  opts.[Include Empty] = "true"
-  a_parts = ParseString(expr, "{}")
-  for part in a_parts do
-    if vars.(part) <> null
-      then result = result + vars.(part)
-      else result = result + part
+
+  expr = if TypeOf(expr) = "string"
+    then {expr}
+    else if TypeOf(expr) = "vector" then V2A(expr)
+  if TypeOf(expr) <> "array"
+    then Throw("'expr' must be a string, array or vector")
+
+  for e in expr do
+    new_e = null
+    if TypeOf(e) <> "string" then new_e = e else do
+      opts.[Include Empty] = "true"
+      a_parts = ParseString(e, "{}")
+      for part in a_parts do
+        if vars.(part) <> null
+          then new_e = new_e + vars.(part)
+          else new_e = new_e + part
+      end
+    end
+    result = result + {new_e}
   end
 
   return(result)
