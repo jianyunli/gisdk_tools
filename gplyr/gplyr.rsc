@@ -770,7 +770,7 @@ Class "df" (tbl, desc, groups)
     SetDataVectors(view + "|" + set, self.tbl, )
 
     // Field descriptions
-    if self.desc.length <> null and self.desc <> null then do
+    if TypeOf(self.desc) <> "null" then do
       {class, spec} = GetViewTableInfo(view)
       if self.in(class, {"FFB", "RDM", "CDF"}) then do
         a_fields = null
