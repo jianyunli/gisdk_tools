@@ -1,6 +1,6 @@
 
 24
-"Size",C,1,8,0,8,0,,"","",,"Blank",
-"Color",C,9,8,0,8,0,,"","",,"Blank",
-"Count",I,17,4,0,11,0,,"","",,"Blank",
-"length",I,21,4,0,11,0,,"","",,"Blank",
+"Size",C,1,8,0,8,0,,"","size description",,"Blank",
+"Color",C,9,8,0,8,0,,"","color description",,"Blank",
+"Count",I,17,4,0,11,0,,"","count description",,"Blank",
+"length",I,21,4,0,11,0,,"","length description",,"Blank",
