@@ -6,26 +6,32 @@ Designed to mimic components of R packages `dplyr`
 and `tidyr`.
 
 tbl
-  Options Array
-  Optional argument to load table data upon creation
-  If null, the data frame is created empty
+  Optional named array
+  Loads table data upon creation. If null, the data frame is created empty.
+
+dsc
+  Optional named array
+  Provides descriptions for each column in the data frame. Names must match
+  column names in tbl.
+
+groups
+  Optional array of strings
+  Lists the grouping fields.
 
 Create an empty data_frame by calling
 df = CreateObject("df")
 
 Create a data frame with a starting table by passing a named array
 df = CreateObject("df", tbl)
-
-This package is open source and hosted here:
-https://github.com/pbsag/gplyr
 */
 
-Class "df" (tbl)
+Class "df" (tbl, dsc, groups)
 
   init do
     self.tbl = CopyArray(tbl)
+    self.dsc = CopyArray(dsc)
+    self.groups = CopyArray(groups)
     self.check()
-    self.groups = null
   EndItem
 
   /*
@@ -319,6 +325,16 @@ Class "df" (tbl)
       newname = Substitute(colname, ".", "_", )
       self.tbl[i][1] = self.uncheck_name(newname)
     end
+
+    // Check field descriptions
+    if self.dsc <> null then do
+      for i = 1 to self.dsc.length do
+        colname = self.check_name(self.dsc[i][1])
+        if self.tbl.(colname).length = null then Throw(
+          "Data frame has a field description for a field not present in table."
+        )
+      end
+    end
   EndItem
 
   /*
@@ -448,8 +464,7 @@ Class "df" (tbl)
   EndItem
 
   /*
-  Creates a bin file by first creating a csv (write_csv) and then
-  exporting that to a bin file.
+  Creates a bin file with table data.
 
   file
     String
@@ -550,6 +565,9 @@ Class "df" (tbl)
     null_to_zero
       Optional string (true/false)
       Whether to convert null values to zero
+    include_descriptions
+      Optional string (true/false)
+      Whether to include field descriptions. Not applicable for all table types.
   */
 
   Macro "read_view" (MacroOpts) do
@@ -558,13 +576,17 @@ Class "df" (tbl)
     set = MacroOpts.set
     fields = MacroOpts.fields
     null_to_zero = MacroOpts.null_to_zero
+    include_descriptions = MacroOpts.include_descriptions
 
     // Check for required arguments and
     // that data frame is currently empty
     if view = null then view = GetLayer()
     if view = null then view = GetView()
     if view = null
-      then Throw("read_view: Required argument 'view' missing.")
+      then Throw(
+        "read_view: Required argument 'view' missing and no\n" +
+        "view or layer is open."
+      )
     if !self.is_empty() then Throw("read_view: data frame must be empty")
     if fields <> null then do
       if TypeOf(fields) = "string" then fields = {fields}
@@ -574,6 +596,13 @@ Class "df" (tbl)
     end else do
       fields = GetFields(view, )
       fields = fields[1]
+    end
+    if include_descriptions then do
+      {class, spec} = GetViewTableInfo(view)
+      if !self.in(class, {"FFB", "RDM", "CDF"}) then Throw(
+        "Field descriptions not supported for '" + class + "' class.\n" +
+        "Only .bin, .dbd, and .cdf views/layers are supported."
+      )
     end
 
     // When a view has too many rows, a "???" will appear in the editor
@@ -590,6 +619,12 @@ Class "df" (tbl)
     for f = 1 to fields.length do
       field = fields[f]
       self.tbl.(field) = data[f]
+
+      if include_descriptions then do
+        description = GetFieldDescription(view + "." + field)
+        if description <> null
+          then self.dsc.(field) = GetFieldDescription(view + "." + field)
+      end
     end
 
     self.check()
@@ -612,6 +647,7 @@ Class "df" (tbl)
     opts = null
     opts.view = OpenTable("view", "FFB", {file})
     opts.fields = fields
+    opts.include_descriptions = "true"
     self.read_view(opts)
     CloseView(opts.view)
   EndItem
@@ -714,6 +750,20 @@ Class "df" (tbl)
     end
 
     SetDataVectors(view + "|" + set, self.tbl, )
+
+    // Field descriptions
+    if self.dsc.length <> null and self.dsc <> null then do
+      {class, spec} = GetViewTableInfo(view)
+      if self.in(class, {"FFB", "RDM", "CDF"}) then do
+        a_fields = null
+        for d = 1 to self.dsc.length do
+          a_fields = a_fields + {self.uncheck_name(self.dsc[d][1])}
+          a_descs = a_descs + {self.dsc[d][2]}
+        end
+
+        RunMacro("Add Field Description", view, a_fields, a_descs)
+      end
+    end
   EndItem
 
   /*
@@ -1736,6 +1786,8 @@ alternative: change the dir variable, but do not commit the change.
 */
 Macro "test gplyr"
 
+  RunMacro("Close All")
+
   // Input files used in some tests
   dir = "Y:\\projects/gisdk_tools/repo/gplyr/unit_test_data"
   csv_file = dir + "/example.csv"
@@ -1854,6 +1906,18 @@ Macro "test gplyr"
   for a = 1 to answer.length do
     if df.tbl.Count[a] <> answer[a] then Throw("test: read_bin failed")
   end
+
+  // test that field descriptions work with read_bin and write_bin
+  answer = {
+    "size description", "color description","count description",
+    "length description"
+  }
+  for a = 1 to answer.length do
+    if df.dsc[a][2] <> answer[a] then Throw("test: field descriptions failed")
+  end
+  tbl_file = dir + "/test_out.bin"
+  df.write_bin(tbl_file)
+  DeleteTableFiles("FFB", tbl_file, )
 
   // test unique
   df = CreateObject("df")
