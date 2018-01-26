@@ -9,7 +9,7 @@ tbl
   Optional named array
   Loads table data upon creation. If null, the data frame is created empty.
 
-dsc
+desc
   Optional named array
   Provides descriptions for each column in the data frame. Names must match
   column names in tbl.
@@ -25,11 +25,11 @@ Create a data frame with a starting table by passing a named array
 df = CreateObject("df", tbl)
 */
 
-Class "df" (tbl, dsc, groups)
+Class "df" (tbl, desc, groups)
 
   init do
     self.tbl = CopyArray(tbl)
-    self.dsc = CopyArray(dsc)
+    self.desc = CopyArray(desc)
     self.groups = CopyArray(groups)
     self.check()
   EndItem
@@ -327,9 +327,9 @@ Class "df" (tbl, dsc, groups)
     end
 
     // Check field descriptions
-    if self.dsc <> null then do
-      for i = 1 to self.dsc.length do
-        colname = self.check_name(self.dsc[i][1])
+    if self.desc <> null then do
+      for i = 1 to self.desc.length do
+        colname = self.check_name(self.desc[i][1])
         if self.tbl.(colname).length = null then Throw(
           "Data frame has a field description for a field not present in table."
         )
@@ -623,7 +623,7 @@ Class "df" (tbl, dsc, groups)
       if include_descriptions then do
         description = GetFieldDescription(view + "." + field)
         if description <> null
-          then self.dsc.(field) = GetFieldDescription(view + "." + field)
+          then self.desc.(field) = GetFieldDescription(view + "." + field)
       end
     end
 
@@ -752,13 +752,13 @@ Class "df" (tbl, dsc, groups)
     SetDataVectors(view + "|" + set, self.tbl, )
 
     // Field descriptions
-    if self.dsc.length <> null and self.dsc <> null then do
+    if self.desc.length <> null and self.desc <> null then do
       {class, spec} = GetViewTableInfo(view)
       if self.in(class, {"FFB", "RDM", "CDF"}) then do
         a_fields = null
-        for d = 1 to self.dsc.length do
-          a_fields = a_fields + {self.uncheck_name(self.dsc[d][1])}
-          a_descs = a_descs + {self.dsc[d][2]}
+        for d = 1 to self.desc.length do
+          a_fields = a_fields + {self.uncheck_name(self.desc[d][1])}
+          a_descs = a_descs + {self.desc[d][2]}
         end
 
         RunMacro("Add Field Description", view, a_fields, a_descs)
@@ -1913,7 +1913,7 @@ Macro "test gplyr"
     "length description"
   }
   for a = 1 to answer.length do
-    if df.dsc[a][2] <> answer[a] then Throw("test: field descriptions failed")
+    if df.desc[a][2] <> answer[a] then Throw("test: field descriptions failed")
   end
   tbl_file = dir + "/test_out.bin"
   df.write_bin(tbl_file)
