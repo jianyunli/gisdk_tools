@@ -123,7 +123,16 @@ MacroOpts
 
   settings_tbl
     String
-    Path to a csv with network settings (except field definitions)
+    Path to a csv with network settings (except field definitions). The file
+    should be organized like so:
+
+    Network   | Parameter   | Value     | Description
+    default    | link_query  |           |
+    da        | link_query  |           |
+    etc
+
+    The "default" network provides base settings for all networks. Other networks
+    (like "da") can overwrite these settings with their own values.
 
   fields_tbl
     String
@@ -140,15 +149,17 @@ MacroOpts
     Optional named array
     If the fields_tbl includes variables (e.g. {period}) in the AB/BA field
     specs, include them here so that they will evaluate correctly.
-    For example:
 
+    For example:
     expr_vars.period = "AM"
 
     Thus, the AB field spec in fields_tbl would evaluate to "ABAMCapE".
+    Any variables in the settings_tbl are also evaluated against 'expr_vars'.
 
-  out_file
+  out_dir
     String
-    Path to the output .net file that will be created
+    Path to the output directory where the .net file will be created. The
+    file name itself is specified in 'settings_tbl'.
 
   label
     Optional string
@@ -163,16 +174,24 @@ Macro "Create Highway Network" (MacroOpts)
   settings_tbl = MacroOpts.settings_tbl
   fields_tbl = MacroOpts.fields_tbl
   expr_vars = MacroOpts.expr_vars
-  out_file = MacroOpts.out_file
+  out_dir = MacroOpts.out_dir
   label = MacroOpts.label
 
   if label = null then label = "network"
 
-  // Open the parameter files
-  settings = RunMacro("Read Parameter File", settings_tbl)
+  // Read the settings table. Create one named array for default settings
+  // across all networks. Create another array for settings specific to each
+  // network.
+  temp = RunMacro("Read Parameter File", settings_tbl, expr_vars)
+  default_settings = temp.default
+  spec_settings = CopyArray(temp)
+  spec_settings.default = null
+  num_networks = spec_settings.length
+
+  // Read the fields table. Expressions in the ab/ba field name columns are
+  // replaced with values from 'expr_vars' (if provided).
   fields = CreateObject("df")
   fields.read_csv(fields_tbl)
-  // Normalize any expressions/variables found in the fields table
   if expr_vars <> null then do
     fields.mutate(
       "ab_field_name",
@@ -188,12 +207,6 @@ Macro "Create Highway Network" (MacroOpts)
   node_fields = fields.copy()
   node_fields.filter("layer = 'node'")
 
-  // Open the link and node layers
-  {nlyr, llyr} = GetDBLayers(hwy_dbd)
-  llyr = AddLayerToWorkspace(llyr, hwy_dbd, llyr)
-  nlyr = AddLayerToWorkspace(nlyr, hwy_dbd, nlyr)
-  SetLayer(llyr)
-
   // Set u-turn and through movement angles.
   // The default is:
   // U-turn: 10 degrees; Through: 30 degrees
@@ -205,103 +218,121 @@ Macro "Create Highway Network" (MacroOpts)
     R2I(settings.through_degrees)
   )
 
-  // The following batch macro is documented in TC GISDK help. Type in
-  // "Networks" into the help index and then select "Batch Mode".
-  opts = null
-  opts.Input.[Link Set] = {hwy_dbd + "|" + llyr, llyr}
-  if settings.link_query <> null then do
-    opts.Input.[Link Set] = opts.Input.[Link Set] + {
-      "link_set",
-      RunMacro("Normalize Query", settings.link_query)
+  for n = 1 to num_networks do
+
+    // Create a settings array for this specific network
+    net_name = spec_settings[n][1]
+    temp = spec_settings.(net_name)
+    settings = default_settings
+    for s = 1 to temp.length do
+      name = temp[s][1]
+      settings.(name) = temp.(name)
+    end
+
+    // Open the link and node layers
+    {nlyr, llyr} = GetDBLayers(hwy_dbd)
+    llyr = AddLayerToWorkspace(llyr, hwy_dbd, llyr)
+    nlyr = AddLayerToWorkspace(nlyr, hwy_dbd, nlyr)
+    SetLayer(llyr)
+
+    // The following batch macro is documented in TC GISDK help. Type in
+    // "Networks" into the help index and then select "Batch Mode".
+    opts = null
+    opts.Input.[Link Set] = {hwy_dbd + "|" + llyr, llyr}
+    if settings.link_query <> null then do
+      opts.Input.[Link Set] = opts.Input.[Link Set] + {
+        "link_set",
+        RunMacro("Normalize Query", settings.link_query)
+      }
+    end
+    opts.Global.[Network Label] = label
+    opts.Global.[Network Options].[Turn Penalties] = "Yes"
+    opts.Global.[Network Options].[Keep Duplicate Links] = "FALSE"
+    opts.Global.[Network Options].[Ignore Link Direction] = "FALSE"
+    opts.Global.[Network Options].[Time Units] = settings.time_units
+    // Create array of link fields to include
+    for r = 1 to link_fields.nrow() do
+      field_name = link_fields.tbl.net_field_name[r]
+      ab_spec = llyr + "." + link_fields.tbl.ab_field_name[r]
+      ba_spec = llyr + "." + link_fields.tbl.ba_field_name[r]
+      opts.Global.[Link Options].(field_name) = {ab_spec, ba_spec, , , "False"}
+    end
+    // Create an array of node fields to include
+    for r = 1 to node_fields.nrow() do
+      field_name = node_fields.tbl.net_field_name[r]
+      ab_spec = nlyr + "." + node_fields.tbl.ab_field_name
+      ba_spec = nlyr + "." + node_fields.tbl.ba_field_name[r]
+      opts.Global.[Node Options].(field_name) = {ab_spec, ba_spec, , , "False"}
+    end
+    opts.Global.[Length Units] = settings.distance_units
+    out_file = out_dir + "/" + settings.out_file
+    opts.Output.[Network File] = out_file
+    ok = RunMacro("TCB Run Operation", "Build Highway Network", opts, &Ret)
+    if !ok then Throw("Highway network creation failed")
+
+    // Add llyr and nlyr back (the batch macro closes them)
+    llyr = AddLayerToWorkspace(llyr, hwy_dbd, llyr)
+    nlyr = AddLayerToWorkspace(nlyr, hwy_dbd, nlyr)
+
+    // The code below calls the TransCAD batch macro to apply network settings.
+    // This macro is documented in the help. In the GISDK help index, type
+    // "settings" and then choose "Highway Networks".
+
+    opts = null
+    opts.Input.Database = hwy_dbd
+    opts.Input.Network = out_file
+    opts.Input.[Def Turn Pen Table] = settings.def_pen_file
+    opts.Input.[Spec Turn Pen Table] = settings.spec_pen_file
+    if settings.centroid_query <> null then do
+      SetLayer(nlyr)
+      centroid_set = CreateSet("centroid_set")
+      centroid_query = RunMacro("Normalize Query", settings.centroid_query)
+      n = SelectByQuery(centroid_set, "several", centroid_query)
+      if n = 0
+        then Throw("No centroids found using '" + settings.centroid_query + "'")
+      opts.Input.[Centroids Set] = {hwy_dbd + "|" + nlyr, nlyr, centroid_set, centroid_query}
+    end
+    if settings.od_toll_query <> null then do
+      SetLayer(llyr)
+      od_toll_set = CreateSet("od_toll_set")
+      od_toll_query = RunMacro("Normalize Query", settings.od_toll_query)
+      n = SelectByQuery(od_toll_set, "several", od_toll_query)
+      if n = 0
+        then Throw("No OD toll links found using '" + settings.od_toll_query + "'")
+      opts.Input.[OD Toll Set] = od_toll_set
+    end
+    if settings.toll_query <> null then do
+      SetLayer(llyr)
+      toll_set = CreateSet("toll_set")
+      toll_query = RunMacro("Normalize Query", settings.toll_query)
+      n = SelectByQuery(toll_set, "several", toll_query)
+      if n = 0
+        then Throw("No fixed toll links found using '" + settings.toll_query + "'")
+      opts.Input.[Toll Set] = toll_set
+    end
+    Opts.Global.[Link to Link Penalty Method] = "Table"
+    opts.Global.[Global Turn Penalties] = {
+      settings.left_tp,
+      settings.right_tp,
+      settings.straight_tp,
+      settings.uturn_tp
     }
-  end
-  opts.Global.[Network Label] = label
-  opts.Global.[Network Options].[Turn Penalties] = "Yes"
-  opts.Global.[Network Options].[Keep Duplicate Links] = "FALSE"
-  opts.Global.[Network Options].[Ignore Link Direction] = "FALSE"
-  opts.Global.[Network Options].[Time Units] = settings.time_units
-  // Create array of link fields to include
-  for r = 1 to link_fields.nrow() do
-    field_name = link_fields.tbl.net_field_name[r]
-    ab_spec = llyr + "." + link_fields.tbl.ab_field_name[r]
-    ba_spec = llyr + "." + link_fields.tbl.ba_field_name[r]
-    opts.Global.[Link Options].(field_name) = {ab_spec, ba_spec, , , "False"}
-  end
-  // Create an array of node fields to include
-  for r = 1 to node_fields.nrow() do
-    field_name = node_fields.tbl.net_field_name[r]
-    ab_spec = nlyr + "." + node_fields.tbl.ab_field_name
-    ba_spec = nlyr + "." + node_fields.tbl.ba_field_name[r]
-    opts.Global.[Node Options].(field_name) = {ab_spec, ba_spec, , , "False"}
-  end
-  opts.Global.[Length Units] = settings.distance_units
-  opts.Output.[Network File] = out_file
-  ok = RunMacro("TCB Run Operation", "Build Highway Network", opts, &Ret)
-  if !ok then Throw("Highway network creation failed")
-
-  // Add llyr and nlyr back (the batch macro closes them)
-  llyr = AddLayerToWorkspace(llyr, hwy_dbd, llyr)
-  nlyr = AddLayerToWorkspace(nlyr, hwy_dbd, nlyr)
-
-  // The code below calls the TransCAD batch macro to apply network settings.
-  // This macro is documented in the help. In the GISDK help index, type
-  // "settings" and then choose "Highway Networks".
-
-  opts = null
-  opts.Input.Database = hwy_dbd
-  opts.Input.Network = out_file
-  opts.Input.[Def Turn Pen Table] = settings.def_pen_file
-  opts.Input.[Spec Turn Pen Table] = settings.spec_pen_file
-  if settings.centroid_query <> null then do
-    SetLayer(nlyr)
-    centroid_set = CreateSet("centroid_set")
-    centroid_query = RunMacro("Normalize Query", settings.centroid_query)
-    n = SelectByQuery(centroid_set, "several", centroid_query)
-    if n = 0
-      then Throw("No centroids found using '" + settings.centroid_query + "'")
-    opts.Input.[Centroids Set] = {hwy_dbd + "|" + nlyr, nlyr, centroid_set, centroid_query}
-  end
-  if settings.od_toll_query <> null then do
-    SetLayer(llyr)
-    od_toll_set = CreateSet("od_toll_set")
-    od_toll_query = RunMacro("Normalize Query", settings.od_toll_query)
-    n = SelectByQuery(od_toll_set, "several", od_toll_query)
-    if n = 0
-      then Throw("No OD toll links found using '" + settings.od_toll_query + "'")
-    opts.Input.[OD Toll Set] = od_toll_set
-  end
-  if settings.toll_query <> null then do
-    SetLayer(llyr)
-    toll_set = CreateSet("toll_set")
-    toll_query = RunMacro("Normalize Query", settings.toll_query)
-    n = SelectByQuery(toll_set, "several", toll_query)
-    if n = 0
-      then Throw("No fixed toll links found using '" + settings.toll_query + "'")
-    opts.Input.[Toll Set] = toll_set
-  end
-  Opts.Global.[Link to Link Penalty Method] = "Table"
-  opts.Global.[Global Turn Penalties] = {
-    settings.left_tp,
-    settings.right_tp,
-    settings.straight_tp,
-    settings.uturn_tp
-  }
-  if (settings.xfer_pen_field <> null and settings.xfer_line_type_field = null) or
-    (settings.xfer_pen_field = null and settings.xfer_line_type_field <> null)
-    then Throw(
-      "Both 'xfer_pen_field' and 'xfer_line_type_field' must be provided\n" +
-      "if either is."
-    )
-  if settings.xfer_pen_field <> null then do
-    if settings.def_pen_file <> null or settings.spec_pen_file <> null
+    if (settings.xfer_pen_field <> null and settings.xfer_line_type_field = null) or
+      (settings.xfer_pen_field = null and settings.xfer_line_type_field <> null)
       then Throw(
-        "A transfer penalty field on the link layer cannot be used with a turn penalty table. Remove one or the other."
+        "Both 'xfer_pen_field' and 'xfer_line_type_field' must be provided\n" +
+        "if either is."
       )
-    opts.Field.[Line ID] = settings.xfer_line_type_field
-    opts.Field.[Xfer Pen] = settings.xfer_pen_field
+    if settings.xfer_pen_field <> null then do
+      if settings.def_pen_file <> null or settings.spec_pen_file <> null
+        then Throw(
+          "A transfer penalty field on the link layer cannot be used with a turn penalty table. Remove one or the other."
+        )
+      opts.Field.[Line ID] = settings.xfer_line_type_field
+      opts.Field.[Xfer Pen] = settings.xfer_pen_field
+    end
+    ok = RunMacro("TCB Run Operation", "Network Settings", opts, &Ret)
+    if !ok then Throw("Highway network settings failed")
   end
-  ok = RunMacro("TCB Run Operation", "Network Settings", opts, &Ret)
-  if !ok then Throw("Highway network settings failed")
-
   RunMacro("Close All")
 EndMacro
