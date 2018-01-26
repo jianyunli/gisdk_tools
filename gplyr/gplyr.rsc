@@ -410,6 +410,24 @@ Class "df" (tbl, desc, groups)
   EndItem
 
   /*
+  Two functions to get and set descriptions in a data frame.
+  */
+
+  Macro "set_desc" (field, description) do
+    if field = null then Throw("set_desc: 'field' not provided")
+    if description = null then Throw("description: 'field' not provided")
+
+    field = self.check_name(field)
+    self.desc.(field) = description
+  EndItem
+  Macro "get_desc" (field) do
+    if field = null then Throw("set_desc: 'field' not provided")
+
+    field = self.check_name(field)
+    return(self.desc.(field))
+  EndItem
+
+  /*
   file
     String
     full path of csv file
@@ -1915,6 +1933,10 @@ Macro "test gplyr"
   for a = 1 to answer.length do
     if df.desc[a][2] <> answer[a] then Throw("test: field descriptions failed")
   end
+  answer = "this is a test"
+  df.set_desc("Size", answer)
+  if df.get_desc("Size") <> answer
+    then Throw("test: 'set_desc' or 'get_desc' failed")
   tbl_file = dir + "/test_out.bin"
   df.write_bin(tbl_file)
   DeleteTableFiles("FFB", tbl_file, )
